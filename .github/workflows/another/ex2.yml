@@ -1,14 +1,13 @@
-name: date and time workflow
+name: Date and Time Workflow
 on:
   create:
-    brnches:
-      -main
+    branches:
+      - main
+
 jobs:
   date:
     runs-on: ubuntu-latest
     steps:
-      -name: date and time
-       run: date
-       shell: bash
-
-
+      - name: Date and Time
+        run: date
+        shell: bash
