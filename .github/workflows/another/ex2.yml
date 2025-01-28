@@ -1,13 +1,13 @@
-name: Date and Time Workflow
+name: Print Date on Branch Creation
+
 on:
   create:
     branches:
-      - main
+      - '*'
 
 jobs:
-  date:
+  print-date:
     runs-on: ubuntu-latest
     steps:
-      - name: Date and Time
+      - name: Print the current date and time
         run: date
-        shell: bash
