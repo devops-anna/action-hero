@@ -25,8 +25,8 @@ jobs:
             const newAssignee = process.env.INPUT_NEW_ASSIGNEE;
             
             if (isNaN(issueNumber)) {
-              core.setFailed("Invalid issue number provided.");
-              return;
+              throw new error("Invalid issue number provided.");
+              
             }
             
             console.log(Reassigning issue #${issueNumber} to ${newAssignee});
