@@ -34,14 +34,7 @@ jobs:
           echo "Repositories: $REPOS"
 
           ISSUES_FILE="issues.csv"
-          PRS_FILE="prs.csv"
-
-          # Initialize files and check write permission
-          echo "Initializing CSV files..."
           echo "Repository,Issue Number,Title,Created Date,Status,Creator,Labels,Assignees,Project,Issues URL,Milestone,Comments_count,Body,Close Date,Closed By,Last Updated" > $ISSUES_FILE
-          echo "Repository,PR Number,Title,Created Date,Status,Creator,Labels,Assignees,PR URL,Comments_count,Body,Close Date,Closed By,Merged By,Last Updated" > $PRS_FILE
-          
-          ls -l  # Check file permissions
 
           for REPO_FULL in $REPOS; do
             ORG=$(echo "$REPO_FULL" | cut -d'/' -f1)
@@ -52,17 +45,26 @@ jobs:
             PAGE=1
             ISSUE_FOUND=false
             while true; do
-              RESPONSE=$(curl -s -H "Authorization: token $GITHUB_PAT" "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
-              echo "Page $PAGE Issues Count: $(echo "$RESPONSE" | jq '. | length')"
+              echo "Fetching page $PAGE for $ORG/$REPO..."
+              RESPONSE=$(curl -s -H "Authorization: token $GITHUB_PAT" \
+                "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
 
-              if [[ $(echo "$RESPONSE" | jq '. | length') -eq 0 ]]; then
+              echo "Raw API Response:"
+              echo "$RESPONSE" | jq '.'
+
+              ISSUE_COUNT=$(echo "$RESPONSE" | jq '. | length')
+              echo "Issue Count: $ISSUE_COUNT"
+
+              if [[ $ISSUE_COUNT -eq 0 ]]; then
                 if [[ $PAGE -eq 1 ]]; then
-                  echo "$REPO,,,No issues found,,,,,,,,,," >> $ISSUES_FILE
+                  echo "No issues found for $REPO. Writing to CSV..."
+                  echo "$REPO,,,,No issues found,,,,,,,,,," >> $ISSUES_FILE
                 fi
                 break
               fi
 
               ISSUE_FOUND=true
+              echo "Writing issues to CSV..."
               echo "$RESPONSE" | jq -r --arg repo "$REPO" '
                 .[] | select(.pull_request | not) |
                 [
@@ -84,14 +86,14 @@ jobs:
                   (.updated_at | split("T")[0])
                 ] | @csv
               ' >> $ISSUES_FILE
-              
+
               PAGE=$((PAGE + 1))
             done
 
             if [[ $ISSUE_FOUND == false ]]; then
-              echo "$REPO,,,No issues found,,,,,,,,,," >> $ISSUES_FILE
+              echo "Final confirmation: No issues found for $REPO"
+              echo "$REPO,,,,No issues found,,,,,,,,,," >> $ISSUES_FILE
             fi
-
           done
 
           echo "Final CSV Contents:"
