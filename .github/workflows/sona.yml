@@ -22,49 +22,43 @@ jobs:
         id: parse_input
         run: |
           REPOS="${{ github.event.inputs.repositories }}"
-          echo "Repositories: $REPOS"
+          echo "Parsing input for repositories: $REPOS"
           echo "$REPOS" | jq -R 'split(",")' > repos.json
-          cat repos.json
 
-      - name: Fetch Issues and PRs
+      - name: Fetch GitHub Issues and PRs for Specified Repositories
         env:
-          GITHUB_PAT: ${{ secrets.SONA_TOKEN }}
+          GITHUB_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           REPOS=$(cat repos.json | jq -r '.[]')
-          echo "Repositories: $REPOS"
+          echo "Repositories to process: $REPOS"
 
           ISSUES_FILE="issues.csv"
+          PRS_FILE="prs.csv"
+          
+          # Initialize CSV headers
           echo "Repository,Issue Number,Title,Created Date,Status,Creator,Labels,Assignees,Project,Issues URL,Milestone,Comments_count,Body,Close Date,Closed By,Last Updated" > $ISSUES_FILE
+          echo "Repository,PR Number,Title,Created Date,Status,Creator,Labels,Assignees,PR URL,Comments_count,Body,Close Date,Closed By,Merged By,Last Updated" > $PRS_FILE
 
           for REPO_FULL in $REPOS; do
             ORG=$(echo "$REPO_FULL" | cut -d'/' -f1)
             REPO=$(echo "$REPO_FULL" | cut -d'/' -f2)
-            echo "Processing: $ORG/$REPO"
+
+            echo "Processing repository: $ORG/$REPO"
 
             # Fetch issues
             PAGE=1
             ISSUE_FOUND=false
             while true; do
-              echo "Fetching page $PAGE for $ORG/$REPO..."
               RESPONSE=$(curl -s -H "Authorization: token $GITHUB_PAT" \
                 "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
 
-              echo "Raw API Response:"
-              echo "$RESPONSE" | jq '.'
-
               ISSUE_COUNT=$(echo "$RESPONSE" | jq '. | length')
-              echo "Issue Count: $ISSUE_COUNT"
-
               if [[ $ISSUE_COUNT -eq 0 ]]; then
-                if [[ $PAGE -eq 1 ]]; then
-                  echo "No issues found for $REPO. Writing to CSV..."
-                  echo "$REPO,,,,No issues found,,,,,,,,,," >> $ISSUES_FILE
-                fi
                 break
               fi
 
               ISSUE_FOUND=true
-              echo "Writing issues to CSV..."
+
               echo "$RESPONSE" | jq -r --arg repo "$REPO" '
                 .[] | select(.pull_request | not) |
                 [
@@ -90,20 +84,70 @@ jobs:
               PAGE=$((PAGE + 1))
             done
 
+            # If no issues found, add a row with "No issues found" under the Status column
             if [[ $ISSUE_FOUND == false ]]; then
-              echo "Final confirmation: No issues found for $REPO"
-              echo "$REPO,,,,No issues found,,,,,,,,,," >> $ISSUES_FILE
+              echo "$REPO,,,,$REPO has no issues,,,,,,,,,," >> $ISSUES_FILE
+            fi
+
+            # Fetch PRs
+            PAGE=1
+            PR_FOUND=false
+            while true; do
+              RESPONSE=$(curl -s -H "Authorization: token $GITHUB_PAT" \
+                "https://api.github.com/repos/$ORG/$REPO/pulls?state=all&per_page=100&page=$PAGE")
+
+              PR_COUNT=$(echo "$RESPONSE" | jq '. | length')
+              if [[ $PR_COUNT -eq 0 ]]; then
+                break
+              fi
+
+              PR_FOUND=true
+
+              for PR_NUMBER in $(echo "$RESPONSE" | jq -r '.[].number'); do
+                PR_DETAILS=$(curl -s -H "Authorization: token $GITHUB_PAT" \
+                  "https://api.github.com/repos/$ORG/$REPO/pulls/$PR_NUMBER")
+                EVENTS=$(curl -s -H "Authorization: token $GITHUB_PAT" \
+                  "https://api.github.com/repos/$ORG/$REPO/issues/$PR_NUMBER/events")
+                CLOSED_BY=$(echo "$EVENTS" | jq -r '.[] | select(.event == "closed") | .actor.login // "None"')
+
+                STATE=$(if [[ $(echo "$PR_DETAILS" | jq -r '.merged_at') != null ]]; then echo "merged";
+                         elif [[ $(echo "$PR_DETAILS" | jq -r '.closed_at') != null ]]; then echo "closed";
+                         else echo "open"; fi)
+
+                MERGED_BY=$(echo "$PR_DETAILS" | jq -r '.merged_by.login // "None"')
+                UPDATED_AT=$(echo "$PR_DETAILS" | jq -r '.updated_at | split("T")[0]')
+
+                echo "$PR_DETAILS" | jq -r --arg repo "$REPO" --arg state "$STATE" --arg merged_by "$MERGED_BY" --arg closed_by "$CLOSED_BY" --arg updated_at "$UPDATED_AT" '
+                  [
+                    $repo,
+                    (.number | tostring),
+                    (.title // "No Title"),
+                    (.created_at | split("T")[0]),
+                    $state,
+                    .user.login,
+                    (if (.labels | length) == 0 then "None" else (.labels | map(.name) | join(";")) end),
+                    (if (.assignees | length) == 0 then "None" else (.assignees | map(.login) | join(";")) end),
+                    .html_url,
+                    (.comments | tostring),
+                    (.body | gsub("\n"; " ") | gsub(","; " ") // "No Description"),
+                    (if .closed_at then (.closed_at | split("T")[0]) else "N/A" end),
+                    $closed_by,
+                    $merged_by,
+                    $updated_at
+                  ] | @csv
+                ' >> $PRS_FILE
+              done
+
+              PAGE=$((PAGE + 1))
+            done
+
+            if [[ $PR_FOUND == false ]]; then
+              echo "$REPO,,,,$REPO has no PRs,,,,,,,,,,," >> $PRS_FILE
             fi
           done
 
-          echo "Final CSV Contents:"
+          echo "Final issues.csv contents:"
           cat issues.csv
-
-      - name: Check generated files
-        run: ls -l
-
-      - name: Print CSV contents
-        run: cat issues.csv
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
