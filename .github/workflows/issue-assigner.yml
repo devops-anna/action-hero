@@ -1,6 +1,7 @@
 name: Issue Assigner
 
 on:
+  workflow_dispatch:
   issue_comment:
     types: [created]
 
