@@ -1,0 +1,50 @@
+name: Reassign Issue
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  reassign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for reassign command in comment
+        id: parse_comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // This regex looks for a command like: /reassign @newassignee
+            const regex = /\/reassign\s+@(\S+)/;
+            const commentBody = context.payload.comment.body;
+            const match = commentBody.match(regex);
+            if (!match) {
+              console.log("No reassign command found.");
+              return { reassign: false };
+            }
+            const newAssignee = match[1];
+            console.log(Found reassign command for: ${newAssignee});
+            return { reassign: true, newAssignee };
+          result-encoding: string
+
+      - name: Exit if no reassign command was found
+        if: steps.parse_comment.outputs.result == 'false'
+        run: echo "No valid reassign command; skipping."
+
+      - name: Reassign the issue
+        if: steps.parse_comment.outputs.result != 'false'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const newAssignee = JSON.parse(process.env.INPUT_PARSED_RESULT).newAssignee;
+            const issue_number = context.issue.number;
+            console.log(Reassigning issue #${issue_number} to @${newAssignee});
+            // Update the issue with the new assignee
+            const response = await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              assignees: [newAssignee]
+            });
+            console.log("Issue reassigned successfully!");
+          env:
+            INPUT_PARSED_RESULT: ${{ steps.parse_comment.outputs.result }}
