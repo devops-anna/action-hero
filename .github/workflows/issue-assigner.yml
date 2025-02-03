@@ -1,0 +1,31 @@
+name: Issue Assigner
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  assign_issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Assign issue based on comment
+        if: |
+          github.event.comment.body == '/assign @*'
+        run: |
+          # Extract the username from the comment
+          USERNAME=$(echo "${{ github.event.comment.body }}" | sed 's/\/assign @//')
+          
+          # Check if the user exists and is a collaborator
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/collaborators/$USERNAME
+          
+          # Reassign the issue
+          curl -X POST \
+               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/assignees \
+               -d "{\"assignees\":[\"$USERNAME\"]}"
