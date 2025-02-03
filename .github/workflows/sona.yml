@@ -37,6 +37,7 @@ jobs:
           ISSUES_FILE="issues.csv"
           PRS_FILE="prs.csv"
 
+          # Define CSV headers
           echo "Repository,Issue Number,Title,Created Date,Status,Creator,Labels,Assignees,Project,Issues URL,Milestone,Comments_count,Body,Close Date,Closed By,Last Updated" > $ISSUES_FILE
           echo "Repository,PR Number,Title,Created Date,Status,Creator,Labels,Assignees,PR URL,Comments_count,Body,Close Date,Closed By,Merged By,Last Updated" > $PRS_FILE
 
@@ -56,7 +57,7 @@ jobs:
               
               if [[ $ISSUE_COUNT -eq 0 ]]; then
                 if [[ $PAGE -eq 1 ]]; then
-                  echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
+                  echo "$REPO,,,,$REPO has no issues,,,,,,,,,," >> $ISSUES_FILE
                 fi
                 break
               fi
@@ -89,7 +90,7 @@ jobs:
             done
 
             if [[ $ISSUE_FOUND == false ]]; then
-              echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
+              echo "$REPO,,,,$REPO has no issues,,,,,,,,,," >> $ISSUES_FILE
             fi
 
             # Fetch PRs
@@ -145,7 +146,7 @@ jobs:
             done
 
             if [[ $PR_FOUND == false ]]; then
-              echo "$REPO,No PRs found,,,,,,,,,,,,," >> $PRS_FILE
+              echo "$REPO,,,,$REPO has no PRs,,,,,,,,,,," >> $PRS_FILE
             fi
           done
 
