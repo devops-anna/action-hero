@@ -23,9 +23,11 @@ jobs:
         run: |
           REPOS="${{ github.event.inputs.repositories }}"
           echo "Parsing input for repositories: $REPOS"
+
           # Convert comma-separated input into an array
           REPOS_ARRAY=$(echo "$REPOS" | jq -R 'split(",")')
           echo "Parsed repositories: $REPOS_ARRAY"
+
           # Save parsed repositories to a file for later steps
           echo "$REPOS_ARRAY" > repos.json
 
@@ -36,58 +38,70 @@ jobs:
           # Read repositories from the file
           REPOS=$(cat repos.json | jq -r '.[]')
           echo "Repositories to process: $REPOS"
+
           # Initialize CSV files
           ISSUES_FILE="issues.csv"
           PRS_FILE="prs.csv"
           echo "Repository,Issue Number,Title,Created Date,Status,Creator,Labels,Assignees,Project,Issues URL,Milestone,Comments_count,Body,Close Date,Closed By,Last Updated" > $ISSUES_FILE
           echo "Repository,PR Number,Title,Created Date,Status,Creator,Labels,Assignees,PR URL,Comments_count,Body,Close Date,Closed By,Merged By,Last Updated" > $PRS_FILE
+
           # Loop through repositories
           for REPO_FULL in $REPOS; do
             ORG=$(echo "$REPO_FULL" | cut -d'/' -f1)
             REPO=$(echo "$REPO_FULL" | cut -d'/' -f2)
+
             echo "Processing organization: $ORG, repository: $REPO"
-            # Fetch issues
-            PAGE=1
-            ISSUE_FOUND=false
-            while true; do
-              RESPONSE=$(curl -s -H "Authorization: token $GITHUB_PAT" \
-                "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
-              
-              ISSUE_COUNT=$(echo "$RESPONSE" | jq '. | length')
-              if [[ $ISSUE_COUNT -eq 0 ]]; then
-                break
+
+            # Check if issues are enabled for the repository
+            ISSUES_ENABLED=$(curl -s -H "Authorization: token $GITHUB_PAT" \
+              "https://api.github.com/repos/$ORG/$REPO" | jq -r '.has_issues')
+
+            if [[ $ISSUES_ENABLED == "false" ]]; then
+              echo "$REPO : No issue tab found,,,,,,,,,,,," >> $ISSUES_FILE
+            else
+              # Fetch issues
+              PAGE=1
+              ISSUE_FOUND=false
+              while true; do
+                RESPONSE=$(curl -s -H "Authorization: token $GITHUB_PAT" \
+                  "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
+                
+                ISSUE_COUNT=$(echo "$RESPONSE" | jq '. | length')
+                if [[ $ISSUE_COUNT -eq 0 ]]; then
+                  break
+                fi
+                
+                ISSUE_FOUND=true
+                
+                echo "$RESPONSE" | jq -r --arg repo "$REPO" '
+                  .[] | select(.pull_request | not) |
+                  [
+                    $repo,
+                    (.number | tostring),
+                    (.title // "No Title"),
+                    (.created_at | split("T")[0]),
+                    .state,
+                    .user.login,
+                    (if (.labels | length) == 0 then "None" else (.labels | map(.name) | join(";")) end),
+                    (if (.assignees | length) == 0 then "None" else (.assignees | map(.login) | join(";")) end),
+                    (.projects_url // "No Project"),
+                    .html_url,
+                    (.milestone.title // "No Milestone"),
+                    (.comments | tostring),
+                    (.body // "No Description" | gsub("\""; "\"\"") | gsub("\n"; " ")),
+                    (.closed_at // "N/A"),
+                    (.closed_by.login // "None"),
+                    (.updated_at | split("T")[0])
+                  ] | @csv
+                ' >> $ISSUES_FILE
+                
+                PAGE=$((PAGE + 1))
+              done
+              if [[ $ISSUE_FOUND == false ]]; then
+                echo "$REPO : No issues found,,,,,,,,,,,," >> $ISSUES_FILE
               fi
-              
-              ISSUE_FOUND=true
-              
-              echo "$RESPONSE" | jq -r --arg repo "$REPO" '
-                .[] | select(.pull_request | not) |
-                [
-                  $repo,
-                  (.number | tostring),
-                  (.title // "No Title"),
-                  (.created_at | split("T")[0]),
-                  .state,
-                  .user.login,
-                  (if (.labels | length) == 0 then "None" else (.labels | map(.name) | join(";")) end),
-                  (if (.assignees | length) == 0 then "None" else (.assignees | map(.login) | join(";")) end),
-                  (.projects_url // "No Project"),
-                  .html_url,
-                  (.milestone.title // "No Milestone"),
-                  (.comments | tostring),
-                  (.body // "No Description" | gsub("\""; "\"\"") | gsub("\n"; " ")),
-                  (.closed_at // "N/A"),
-                  (.closed_by.login // "None"),
-                  (.updated_at | split("T")[0])
-                ] | @csv
-              ' >> $ISSUES_FILE
-              
-              PAGE=$((PAGE + 1))
-            done
-            if [[ $ISSUE_FOUND == false ]]; then
-              echo "$REPO : No issues found,,,,,,,,,,,," >> $ISSUES_FILE
             fi
-            
+
             # Fetch PRs
             PAGE=1
             PR_FOUND=false
@@ -145,7 +159,7 @@ jobs:
             fi
           done
           echo "Issues and PRs saved to $ISSUES_FILE and $PRS_FILE"
-          
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
