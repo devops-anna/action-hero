@@ -15,22 +15,23 @@ on:
 jobs:
   reassign:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
       - name: Reassign the issue
         uses: actions/github-script@v6
         with:
           script: |
             // Retrieve the inputs from the workflow_dispatch event
-            const issueNumber = parseInt(process.env.INPUT_ISSUE_NUMBER, 10);
-            const newAssignee = process.env.INPUT_NEW_ASSIGNEE;
-            
+            const issueNumber = parseInt("${{ github.event.inputs.issue_number }}", 10);
+            const newAssignee = "${{ github.event.inputs.new_assignee }}";
+
             if (isNaN(issueNumber)) {
-              throw new error("Invalid issue number provided.");
-              
+              throw new Error("Invalid issue number provided.");
             }
-            
-            console.log(Reassigning issue #${issueNumber} to ${newAssignee});
-            
+
+            console.log(`Reassigning issue #${issueNumber} to ${newAssignee}`);
+
             // Update the issue with the new assignee using the GitHub API
             await github.rest.issues.update({
               owner: context.repo.owner,
@@ -38,8 +39,5 @@ jobs:
               issue_number: issueNumber,
               assignees: [newAssignee]
             });
-            
+
             console.log("Issue reassigned successfully!");
-        env:
-          INPUT_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-          INPUT_NEW_ASSIGNEE: ${{ github.event.inputs.new_assignee }}
