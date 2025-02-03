@@ -33,7 +33,7 @@ jobs:
 
       - name: Fetch GitHub Issues and PRs for Specified Repositories
         env:
-          GITHUB_PAT: ${{ secrets.GHCR_PAT }}
+          GITHUB_PAT: ${{ secrets.SONA_TOKEN }}
         run: |
           # Read repositories from the file
           REPOS=$(cat repos.json | jq -r '.[]')
