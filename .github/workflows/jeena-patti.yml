@@ -1,50 +1,45 @@
 name: Reassign Issue
 
 on:
-  issue_comment:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'The issue number to reassign'
+        required: true
+        type: string
+      new_assignee:
+        description: 'The GitHub username of the new assignee'
+        required: true
+        type: string
 
 jobs:
   reassign:
     runs-on: ubuntu-latest
     steps:
-      - name: Check for reassign command in comment
-        id: parse_comment
-        uses: actions/github-script@v6
-        with:
-          script: |
-            // This regex looks for a command like: /reassign @newassignee
-            const regex = /\/reassign\s+@(\S+)/;
-            const commentBody = context.payload.comment.body;
-            const match = commentBody.match(regex);
-            if (!match) {
-              console.log("No reassign command found.");
-              return { reassign: false };
-            }
-            const newAssignee = match[1];
-            console.log(Found reassign command for: ${newAssignee});
-            return { reassign: true, newAssignee };
-          result-encoding: string
-
-      - name: Exit if no reassign command was found
-        if: steps.parse_comment.outputs.result == 'false'
-        run: echo "No valid reassign command; skipping."
-
       - name: Reassign the issue
-        if: steps.parse_comment.outputs.result != 'false'
         uses: actions/github-script@v6
         with:
           script: |
-            const newAssignee = JSON.parse(process.env.INPUT_PARSED_RESULT).newAssignee;
-            const issue_number = context.issue.number;
-            console.log(Reassigning issue #${issue_number} to @${newAssignee});
-            // Update the issue with the new assignee
-            const response = await github.rest.issues.update({
+            // Retrieve the inputs from the workflow_dispatch event
+            const issueNumber = parseInt(process.env.INPUT_ISSUE_NUMBER, 10);
+            const newAssignee = process.env.INPUT_NEW_ASSIGNEE;
+            
+            if (isNaN(issueNumber)) {
+              core.setFailed("Invalid issue number provided.");
+              return;
+            }
+            
+            console.log(Reassigning issue #${issueNumber} to ${newAssignee});
+            
+            // Update the issue with the new assignee using the GitHub API
+            await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number,
+              issue_number: issueNumber,
               assignees: [newAssignee]
             });
+            
             console.log("Issue reassigned successfully!");
-          env:
-            INPUT_PARSED_RESULT: ${{ steps.parse_comment.outputs.result }}
+        env:
+          INPUT_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          INPUT_NEW_ASSIGNEE: ${{ github.event.inputs.new_assignee }}
