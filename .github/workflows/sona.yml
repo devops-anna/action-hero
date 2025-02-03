@@ -23,33 +23,26 @@ jobs:
         run: |
           REPOS="${{ github.event.inputs.repositories }}"
           echo "Parsing input for repositories: $REPOS"
-
-          # Convert comma-separated input into an array
           REPOS_ARRAY=$(echo "$REPOS" | jq -R 'split(",")')
           echo "Parsed repositories: $REPOS_ARRAY"
-
-          # Save parsed repositories to a file for later steps
           echo "$REPOS_ARRAY" > repos.json
 
       - name: Fetch GitHub Issues and PRs for Specified Repositories
         env:
           GITHUB_PAT: ${{ secrets.SONA_TOKEN }}
         run: |
-          # Read repositories from the file
           REPOS=$(cat repos.json | jq -r '.[]')
           echo "Repositories to process: $REPOS"
 
-          # Initialize CSV files
           ISSUES_FILE="issues.csv"
           PRS_FILE="prs.csv"
+
           echo "Repository,Issue Number,Title,Created Date,Status,Creator,Labels,Assignees,Project,Issues URL,Milestone,Comments_count,Body,Close Date,Closed By,Last Updated" > $ISSUES_FILE
           echo "Repository,PR Number,Title,Created Date,Status,Creator,Labels,Assignees,PR URL,Comments_count,Body,Close Date,Closed By,Merged By,Last Updated" > $PRS_FILE
 
-          # Loop through repositories
           for REPO_FULL in $REPOS; do
             ORG=$(echo "$REPO_FULL" | cut -d'/' -f1)
             REPO=$(echo "$REPO_FULL" | cut -d'/' -f2)
-
             echo "Processing organization: $ORG, repository: $REPO"
 
             # Fetch issues
@@ -60,15 +53,16 @@ jobs:
                 "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
               
               ISSUE_COUNT=$(echo "$RESPONSE" | jq '. | length')
-              if [[ $ISSUE_COUNT -eq 0 && $PAGE -eq 1 ]]; then
-                echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
-                break
-              elif [[ $ISSUE_COUNT -eq 0 ]]; then
+              
+              if [[ $ISSUE_COUNT -eq 0 ]]; then
+                if [[ $PAGE -eq 1 ]]; then
+                  echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
+                fi
                 break
               fi
               
               ISSUE_FOUND=true
-              
+
               echo "$RESPONSE" | jq -r --arg repo "$REPO" '
                 .[] | select(.pull_request | not) |
                 [
@@ -93,10 +87,11 @@ jobs:
               
               PAGE=$((PAGE + 1))
             done
-            if [[ $ISSUE_FOUND == false && $PAGE -eq 1 ]]; then
+
+            if [[ $ISSUE_FOUND == false ]]; then
               echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
             fi
-            
+
             # Fetch PRs
             PAGE=1
             PR_FOUND=false
@@ -118,14 +113,13 @@ jobs:
                     "https://api.github.com/repos/$ORG/$REPO/issues/$PR_NUMBER/events")
                 CLOSED_BY=$(echo "$EVENTS" | jq -r '.[] | select(.event == "closed") | .actor.login // "None"')
                 
-                # Determine PR state
                 STATE=$(if [[ $(echo "$PR_DETAILS" | jq -r '.merged_at') != null ]]; then echo "merged"; 
                          elif [[ $(echo "$PR_DETAILS" | jq -r '.closed_at') != null ]]; then echo "closed"; 
                          else echo "open"; fi)
                 
                 MERGED_BY=$(echo "$PR_DETAILS" | jq -r '.merged_by.login // "None"')
                 UPDATED_AT=$(echo "$PR_DETAILS" | jq -r '.updated_at | split("T")[0]')
-                
+
                 echo "$PR_DETAILS" | jq -r --arg repo "$REPO" --arg state "$STATE" --arg merged_by "$MERGED_BY" --arg closed_by "$CLOSED_BY" --arg updated_at "$UPDATED_AT" '
                   [
                     $repo,
@@ -149,10 +143,12 @@ jobs:
               
               PAGE=$((PAGE + 1))
             done
+
             if [[ $PR_FOUND == false ]]; then
               echo "$REPO,No PRs found,,,,,,,,,,,,," >> $PRS_FILE
             fi
           done
+
           echo "Issues and PRs saved to $ISSUES_FILE and $PRS_FILE"
 
       - name: Upload Artifacts
