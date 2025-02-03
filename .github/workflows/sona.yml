@@ -18,7 +18,7 @@ jobs:
       - name: Set up jq
         run: sudo apt-get install -y jq
 
-      - name: Parse input for repositories
+      - name: Parse input for organizations and repositories
         id: parse_input
         run: |
           REPOS="${{ github.event.inputs.repositories }}"
@@ -60,7 +60,10 @@ jobs:
                 "https://api.github.com/repos/$ORG/$REPO/issues?state=all&per_page=100&page=$PAGE")
               
               ISSUE_COUNT=$(echo "$RESPONSE" | jq '. | length')
-              if [[ $ISSUE_COUNT -eq 0 ]]; then
+              if [[ $ISSUE_COUNT -eq 0 && $PAGE -eq 1 ]]; then
+                echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
+                break
+              elif [[ $ISSUE_COUNT -eq 0 ]]; then
                 break
               fi
               
@@ -90,8 +93,7 @@ jobs:
               
               PAGE=$((PAGE + 1))
             done
-            
-            if [[ $ISSUE_FOUND == false ]]; then
+            if [[ $ISSUE_FOUND == false && $PAGE -eq 1 ]]; then
               echo "$REPO,No issues found,,,,,,,,,,,," >> $ISSUES_FILE
             fi
             
@@ -147,7 +149,6 @@ jobs:
               
               PAGE=$((PAGE + 1))
             done
-            
             if [[ $PR_FOUND == false ]]; then
               echo "$REPO,No PRs found,,,,,,,,,,,,," >> $PRS_FILE
             fi
