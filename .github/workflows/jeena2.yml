@@ -34,13 +34,17 @@ jobs:
                   // Fetch all releases for the repository
                   const releases = await github.rest.repos.listReleases({ owner, repo });
                   console.log(`Found ${releases.data.length} releases in ${owner}/${repo}`);
-                  
-                  // Log release tags for debugging
-                  releases.data.forEach(r => console.log(`Release found: ${r.tag_name}`));
 
-                  // Check if an exact match exists for releaseVersion
+                  // Debugging: Log release tags and names
+                  releases.data.forEach(r => console.log(`Release found: ${r.tag_name || r.name}`));
+
+                  // Match release based on the version string strictly matching the start of tag_name or name
                   const release = releases.data.find(r => 
-                    r.tag_name.trim() === releaseVersion.trim() || r.name.trim() === releaseVersion.trim()
+                    (r.tag_name.startsWith(releaseVersion) || r.name.startsWith(releaseVersion)) &&
+                    // Ensure no extra characters after the version unless they are allowed separators (e.g., a dot or a dash)
+                    (r.tag_name === releaseVersion || r.name === releaseVersion || 
+                     r.tag_name.startsWith(`${releaseVersion}.`) || r.name.startsWith(`${releaseVersion}.`) ||
+                     r.tag_name.startsWith(`${releaseVersion}-`) || r.name.startsWith(`${releaseVersion}-`))
                   );
 
                   if (!release) {
@@ -50,7 +54,7 @@ jobs:
                     continue;
                   }
 
-                  console.log(`Release ${releaseVersion} found: ${release.tag_name || release.name}`);
+                  console.log(`Release matching ${releaseVersion} found: ${release.tag_name || release.name}`);
                   console.log(`Release body: ${release.body}`);
 
                   // Fetch PRs with pagination
