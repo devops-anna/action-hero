@@ -19,7 +19,7 @@ jobs:
       - name: Fetch PRs and Issues for Release Versions
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.ISSUE_TOKENS }}
+          github-token: ${{ secrets.JEENA_TOKEN}}
           script: |
             const fs = require('fs');
 
