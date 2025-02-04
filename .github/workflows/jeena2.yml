@@ -33,10 +33,14 @@ jobs:
                 try {
                   // Fetch all releases for the repository
                   const releases = await github.rest.repos.listReleases({ owner, repo });
+                  console.log(`Found ${releases.data.length} releases in ${owner}/${repo}`);
+                  
+                  // Log release tags for debugging
+                  releases.data.forEach(r => console.log(`Release found: ${r.tag_name}`));
 
-                  // Check if an exact match exists
+                  // Check if an exact match exists for releaseVersion
                   const release = releases.data.find(r => 
-                    r.tag_name === releaseVersion || r.name === releaseVersion
+                    r.tag_name.trim() === releaseVersion.trim() || r.name.trim() === releaseVersion.trim()
                   );
 
                   if (!release) {
