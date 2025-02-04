@@ -1,0 +1,108 @@
+name: Fetch PRs and Issues for Release Versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      repos_and_versions:
+        description: 'Comma-separated list of organization:repository:release_version (e.g., orgA:repoA:v0.0.10,orgB:repoB:v0.0.10)'
+        required: true
+        type: string
+
+jobs:
+  fetch-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch PRs and Issues for Release Versions
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.JEENA_TOKEN }}
+          script: |
+            const fs = require('fs');
+            (async () => {
+              const reposAndVersions = '${{ github.event.inputs.repos_and_versions }}'.split(',');
+              let csvContent = 'Organization,Repository,Release Version,Type,Number,Title,State,URL\n';
+              for (const repoVersion of reposAndVersions) {
+                const [owner, repo, releaseVersion] = repoVersion.split(':');
+                console.log(`Fetching data from ${owner}/${repo} for release version ${releaseVersion}`);
+                try {
+                  // Fetch all releases
+                  const releases = await github.rest.repos.listReleases({ owner, repo });
+
+                  // Find release with exact or partial match
+                  const release = releases.data.find(r =>
+                    r.tag_name === releaseVersion || 
+                    r.name === releaseVersion || 
+                    r.tag_name.includes(releaseVersion) || 
+                    r.name.includes(releaseVersion)
+                  );
+
+                  if (!release) {
+                    // If release is not found
+                    console.log(`Release ${releaseVersion} not found in ${owner}/${repo}`);
+                    csvContent += `${owner},${repo},${releaseVersion},Not Found,,,,,\n`;
+                    continue;
+                  }
+
+                  console.log(`Release ${releaseVersion} found: ${release.tag_name || release.name}`);
+                  console.log(`Release body: ${release.body}`);
+
+                  // Fetch PRs with pagination
+                  let prs = [];
+                  let page = 1;
+                  let prsResponse;
+                  do {
+                    prsResponse = await github.rest.pulls.list({ owner, repo, state: 'all', per_page: 100, page });
+                    prs = prs.concat(prsResponse.data);
+                    page++;
+                  } while (prsResponse.data.length === 100);
+
+                  const relatedPRs = prs.filter(pr => release.body?.includes(`pull/${pr.number}`));
+                  console.log(`Found ${relatedPRs.length} related PRs`);
+
+                  // Fetch Issues with pagination
+                  let issues = [];
+                  page = 1;
+                  let issuesResponse;
+                  do {
+                    issuesResponse = await github.rest.issues.listForRepo({ owner, repo, state: 'all', per_page: 100, page });
+                    issues = issues.concat(issuesResponse.data);
+                    page++;
+                  } while (issuesResponse.data.length === 100);
+
+                  const relatedIssues = issues.filter(issue => 
+                    issue.pull_request === undefined &&
+                    (issue.milestone?.title === releaseVersion ||
+                    issue.labels?.some(label => label.name.includes(releaseVersion)) ||
+                    release.body?.includes(`#${issue.number}`)
+                  ));
+                  console.log(`Found ${relatedIssues.length} related Issues`);
+
+                  // Write PRs to CSV
+                  relatedPRs.forEach(pr => {
+                    csvContent += `${owner},${repo},${releaseVersion},PR,${pr.number},"${pr.title.replace(/"/g, '""')}",${pr.state},${pr.html_url}\n`;
+                  });
+
+                  // Write Issues to CSV
+                  relatedIssues.forEach(issue => {
+                    csvContent += `${owner},${repo},${releaseVersion},Issue,${issue.number},"${issue.title.replace(/"/g, '""')}",${issue.state},${issue.html_url}\n`;
+                  });
+
+                } catch (error) {
+                  console.error(`Error processing ${owner}/${repo} for ${releaseVersion}: ${error.message}`);
+                  csvContent += `${owner},${repo},${releaseVersion},Error,,"${error.message.replace(/"/g, '""')}",,\n`;
+                }
+              }
+
+              fs.writeFileSync('release_data.csv', csvContent);
+              console.log('CSV file saved as release_data.csv');
+            })();
+            
+      - name: Upload CSV as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-data
+          path: release_data.csv
