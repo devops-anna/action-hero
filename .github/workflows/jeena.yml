@@ -60,7 +60,6 @@ jobs:
             
             fs.writeFileSync('release_data.csv', csvContent);
             console.log('CSV file saved as release_data.csv');
-
       - name: Upload CSV as Artifact
         uses: actions/upload-artifact@v4
         with:
