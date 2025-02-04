@@ -19,35 +19,27 @@ jobs:
       - name: Fetch PRs and Issues for Release Versions
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.ISSUE_TOKENS }}
+          github-token: ${{ secrets.GHCR_PAT }}
           script: |
             const fs = require('fs');
             const reposAndVersions = '${{ github.event.inputs.repos_and_versions }}'.split(',');
-
             let csvContent = 'Organization,Repository,Release Version,Type,Number,Title,State,URL\n';
-
             for (const repoVersion of reposAndVersions) {
               const [owner, repo, releaseVersion] = repoVersion.split(':');
               
               console.log(Fetching data from ${owner}/${repo} for release version ${releaseVersion});
               try {
                 const releases = await github.rest.repos.listReleases({ owner, repo });
-
-                // Find the exact release version specified (without RC or other versions)
                 const release = releases.data.find(r => r.tag_name === releaseVersion || r.name === releaseVersion);
-
                 if (!release) {
                   console.log(Release ${releaseVersion} not found in ${owner}/${repo});
                   csvContent += ${owner},${repo},${releaseVersion},Not Found,,,,\n;
-                  continue; // Skip to the next repository if not found
+                  continue;
                 }
-
                 console.log(Release ${releaseVersion} found. Fetching related PRs and Issues...);
-
                 const prMentionPattern = /pull\/(\d+)/g;
                 const prs = await github.rest.pulls.list({ owner, repo, state: 'all', per_page: 100 });
                 const relatedPRs = prs.data.filter(pr => release.body.includes(pull/${pr.number}));
-
                 const issues = await github.rest.issues.listForRepo({ owner, repo, state: 'all', per_page: 100 });
                 const relatedIssues = issues.data.filter(issue => 
                   issue.pull_request === undefined &&
@@ -55,15 +47,12 @@ jobs:
                   issue.labels.some(label => label.name.includes(releaseVersion)) ||
                   release.body.includes(#${issue.number}))
                 );
-
                 relatedPRs.forEach(pr => {
                   csvContent += ${owner},${repo},${releaseVersion},PR,${pr.number},"${pr.title.replace(/"/g, '""')}",${pr.state},${pr.html_url}\n;
                 });
-
                 relatedIssues.forEach(issue => {
                   csvContent += ${owner},${repo},${releaseVersion},Issue,${issue.number},"${issue.title.replace(/"/g, '""')}",${issue.state},${issue.html_url}\n;
                 });
-
               } catch (error) {
                 console.error(Error processing ${owner}/${repo} for ${releaseVersion}: ${error.message});
               }
