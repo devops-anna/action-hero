@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       repos_and_versions:
-        description: 'Comma-separated list of organization:repository:release_version (e.g., orgA:repoA:v0.0.10,orgB:repoB:v0.0.10)'
+        description: 'Comma-separated list of organization:repository:release_version (e.g., orgA:repoA:v0.0.10,orgB:repoB:v0.0.8)'
         required: true
         type: string
 
@@ -25,20 +25,22 @@ jobs:
             (async () => {
               const reposAndVersions = '${{ github.event.inputs.repos_and_versions }}'.split(',');
               let csvContent = 'Organization,Repository,Release Version,Type,Number,Title,State,URL\n';
+
               for (const repoVersion of reposAndVersions) {
                 const [owner, repo, releaseVersion] = repoVersion.split(':');
                 console.log(`Fetching data from ${owner}/${repo} for release version ${releaseVersion}`);
+
                 try {
-                  // Fetch all releases
+                  // Fetch all releases for the repository
                   const releases = await github.rest.repos.listReleases({ owner, repo });
 
-                  // Find release with an exact match
-                  const release = releases.data.find(r =>
+                  // Check if an exact match exists
+                  const release = releases.data.find(r => 
                     r.tag_name === releaseVersion || r.name === releaseVersion
                   );
 
                   if (!release) {
-                    // If release is not found
+                    // Mark as "Not Found" if no exact match is found
                     console.log(`Release ${releaseVersion} not found in ${owner}/${repo}`);
                     csvContent += `${owner},${repo},${releaseVersion},Not Found,,,,,\n`;
                     continue;
@@ -94,6 +96,7 @@ jobs:
                 }
               }
 
+              // Save the CSV file
               fs.writeFileSync('release_data.csv', csvContent);
               console.log('CSV file saved as release_data.csv');
             })();
