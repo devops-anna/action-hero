@@ -25,33 +25,38 @@ jobs:
             (async () => {
               const reposAndVersions = '${{ github.event.inputs.repos_and_versions }}'.split(',');
               let csvContent = 'Organization,Repository,Release Version,Type,Number,Title,State,URL\n';
+
               for (const repoVersion of reposAndVersions) {
                 const [owner, repo, releaseVersion] = repoVersion.split(':');
-                console.log(`Fetching data from ${owner}/${repo} for release version ${releaseVersion}`);
+                console.log(`🔍 Fetching data from ${owner}/${repo} for release version ${releaseVersion}`);
 
                 try {
                   // Fetch all releases
                   const releases = await github.rest.repos.listReleases({ owner, repo });
+                  console.log(`✅ Found ${releases.data.length} releases in ${owner}/${repo}`);
 
-                  // Check if input version includes "rc"
+                  // Check if the input version includes "rc"
                   const isRcVersion = releaseVersion.includes("rc");
 
-                  // Find release based on exact match or best match
-                  const release = releases.data.find(r =>
-                    r.tag_name === releaseVersion ||
-                    r.name === releaseVersion ||
-                    (!isRcVersion && r.tag_name.startsWith(releaseVersion) && !r.tag_name.includes('rc')) ||  // If input is NOT rc, ignore rc versions
-                    (!isRcVersion && r.name.startsWith(releaseVersion) && !r.name.includes('rc')) // If input is NOT rc, ignore rc versions
-                  );
+                  // Filter releases to match the input version
+                  let release = releases.data.find(r => r.tag_name === releaseVersion || r.name === releaseVersion);
+
+                  // If no exact match, check for best match
+                  if (!release) {
+                    release = releases.data.find(r =>
+                      (isRcVersion && r.tag_name.startsWith(releaseVersion)) || 
+                      (!isRcVersion && r.tag_name.startsWith(releaseVersion) && !r.tag_name.includes('rc'))
+                    );
+                  }
 
                   if (!release) {
-                    console.log(`Release ${releaseVersion} not found in ${owner}/${repo}`);
+                    console.log(`❌ Release ${releaseVersion} not found in ${owner}/${repo}`);
                     csvContent += `${owner},${repo},${releaseVersion},Not Found,,,,\n`;
                     continue;
                   }
 
-                  console.log(`Release ${releaseVersion} found: ${release.tag_name || release.name}`);
-                  console.log(`Release body: ${release.body}`);
+                  console.log(`🎯 Found release: ${release.tag_name || release.name}`);
+                  console.log(`📄 Release body: ${release.body}`);
 
                   // Fetch PRs with pagination
                   let prs = [];
@@ -63,7 +68,7 @@ jobs:
                     page++;
                   } while (prsResponse.data.length === 100);
                   const relatedPRs = prs.filter(pr => release.body?.includes(`pull/${pr.number}`));
-                  console.log(`Found ${relatedPRs.length} related PRs`);
+                  console.log(`🔗 Found ${relatedPRs.length} related PRs`);
 
                   // Fetch Issues with pagination
                   let issues = [];
@@ -80,7 +85,7 @@ jobs:
                     issue.labels?.some(label => label.name.includes(releaseVersion)) ||
                     release.body?.includes(`#${issue.number}`)
                   ));
-                  console.log(`Found ${relatedIssues.length} related Issues`);
+                  console.log(`📌 Found ${relatedIssues.length} related Issues`);
 
                   // Write PRs to CSV
                   relatedPRs.forEach(pr => {
@@ -90,13 +95,14 @@ jobs:
                   relatedIssues.forEach(issue => {
                     csvContent += `${owner},${repo},${releaseVersion},Issue,${issue.number},"${issue.title.replace(/"/g, '""')}",${issue.state},${issue.html_url}\n`;
                   });
+
                 } catch (error) {
-                  console.error(`Error processing ${owner}/${repo} for ${releaseVersion}: ${error.message}`);
+                  console.error(`🚨 Error processing ${owner}/${repo} for ${releaseVersion}: ${error.message}`);
                   csvContent += `${owner},${repo},${releaseVersion},Error,,"${error.message.replace(/"/g, '""')}",,\n`;
                 }
               }
               fs.writeFileSync('release_data.csv', csvContent);
-              console.log('CSV file saved as release_data.csv');
+              console.log('📁 CSV file saved as release_data.csv');
             })();
 
       - name: Upload CSV as Artifact
