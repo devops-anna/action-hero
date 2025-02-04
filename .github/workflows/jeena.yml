@@ -19,7 +19,7 @@ jobs:
       - name: Fetch PRs and Issues for Release Versions
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GHCR_PAT }}
+          github-token: ${{ secrets.ISSUE_TOKENS }}
           script: |
             const fs = require('fs');
             const reposAndVersions = '${{ github.event.inputs.repos_and_versions }}'.split(',');
