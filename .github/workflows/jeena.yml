@@ -42,22 +42,45 @@ jobs:
                   }
 
                   console.log(`Release ${releaseVersion} found. Fetching related PRs and Issues...`);
+                  console.log(`Release body: ${release.body}`); // Debugging line
 
-                  const prs = await github.rest.pulls.list({ owner, repo, state: 'all', per_page: 100 });
-                  const relatedPRs = prs.data.filter(pr => release.body?.includes(`pull/${pr.number}`));
+                  // Fetch PRs with pagination
+                  let prs = [];
+                  let page = 1;
+                  let prsResponse;
+                  do {
+                    prsResponse = await github.rest.pulls.list({ owner, repo, state: 'all', per_page: 100, page });
+                    prs = prs.concat(prsResponse.data);
+                    page++;
+                  } while (prsResponse.data.length === 100);
 
-                  const issues = await github.rest.issues.listForRepo({ owner, repo, state: 'all', per_page: 100 });
-                  const relatedIssues = issues.data.filter(issue => 
+                  const relatedPRs = prs.filter(pr => release.body?.includes(`pull/${pr.number}`));
+                  console.log(`Found ${relatedPRs.length} related PRs`);
+
+                  // Fetch Issues with pagination
+                  let issues = [];
+                  page = 1;
+                  let issuesResponse;
+                  do {
+                    issuesResponse = await github.rest.issues.listForRepo({ owner, repo, state: 'all', per_page: 100, page });
+                    issues = issues.concat(issuesResponse.data);
+                    page++;
+                  } while (issuesResponse.data.length === 100);
+
+                  const relatedIssues = issues.filter(issue => 
                     issue.pull_request === undefined &&
                     (issue.milestone?.title === releaseVersion ||
                     issue.labels?.some(label => label.name.includes(releaseVersion)) ||
-                    release.body?.includes(`#${issue.number}`))
-                  );
+                    release.body?.includes(`#${issue.number}`)
+                  ));
+                  console.log(`Found ${relatedIssues.length} related Issues`);
 
+                  // Write PRs to CSV
                   relatedPRs.forEach(pr => {
                     csvContent += `${owner},${repo},${releaseVersion},PR,${pr.number},"${pr.title.replace(/"/g, '""')}",${pr.state},${pr.html_url}\n`;
                   });
 
+                  // Write Issues to CSV
                   relatedIssues.forEach(issue => {
                     csvContent += `${owner},${repo},${releaseVersion},Issue,${issue.number},"${issue.title.replace(/"/g, '""')}",${issue.state},${issue.html_url}\n`;
                   });
