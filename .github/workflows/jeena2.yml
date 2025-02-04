@@ -32,12 +32,9 @@ jobs:
                   // Fetch all releases
                   const releases = await github.rest.repos.listReleases({ owner, repo });
 
-                  // Find release with exact or partial match
+                  // Find release with an exact match
                   const release = releases.data.find(r =>
-                    r.tag_name === releaseVersion || 
-                    r.name === releaseVersion || 
-                    r.tag_name.includes(releaseVersion) || 
-                    r.name.includes(releaseVersion)
+                    r.tag_name === releaseVersion || r.name === releaseVersion
                   );
 
                   if (!release) {
