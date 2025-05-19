@@ -1,0 +1,49 @@
+name: Backup and migrate GitHub org repos to GitLab
+ 
+on:
+  workflow_dispatch:
+    inputs:
+      github_org:
+        description: 'GitHub organization name'
+        required: true
+        default: 'jeena-reji'
+      gitlab_group:
+        description: 'GitLab group/namespace for import'
+        required: true
+        default: 'mygroup'
+      gitlab_host:
+        description: 'GitLab host domain (e.g. gitlab.com)'
+        required: true
+        default: 'gitlab.com'
+      repos:
+        description: 'Comma-separated GitHub repo names (optional - empty means all repos)'
+        required: false
+        default: ''
+ 
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  GL_TOKEN: ${{ secrets.GL_TOKEN }}
+ 
+jobs:
+  backup-and-import:
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Checkout repo (to get scripts)
+        uses: actions/checkout@v3
+ 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq git curl
+ 
+      
+      - name: Set execution permission
+        run: |
+          chmod +x scripts/export_github.sh scripts/import_gitlab.sh scripts/export_issues_prs.sh scripts/import_issues_prs.sh
+ 
+      - name: Export GitHub repos
+        id: export
+        run: |
+          bash scripts/export_github.sh "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}"
+      - name: Import repos to GitLab
+        run: |
+          bash scripts/import_gitlab.sh "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}"
