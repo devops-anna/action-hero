@@ -48,7 +48,6 @@ for repo in os.listdir(metadata_root):
 
     project_id = resp.json()["id"]
 
-    # Fetch milestone mapping
     milestone_map = {}
     r = requests.get(f"https://{host}/api/v4/projects/{project_id}/milestones", headers=headers)
     if r.status_code == 200:
@@ -66,11 +65,27 @@ for repo in os.listdir(metadata_root):
         if "pull_request" in issue:
             continue
 
+        github_issue_ref = f"Imported from GitHub issue #{issue['number']}"
+
+        # Check if issue already exists in GitLab using the GitHub issue reference
+        search_url = f"https://{host}/api/v4/projects/{project_id}/issues?search={quote(str(issue['number']))}"
+        search_resp = requests.get(search_url, headers=headers)
+
+        already_exists = False
+        if search_resp.status_code == 200:
+            for existing_issue in search_resp.json():
+                if github_issue_ref in existing_issue.get("description", ""):
+                    print(f"Issue already exists: {issue['title']}")
+                    already_exists = True
+                    break
+
+        if already_exists:
+            continue
+
         labels = [label["name"] for label in issue.get("labels", [])]
         milestone_title = issue.get("milestone")["title"] if issue.get("milestone") else None
         milestone_id = milestone_map.get(milestone_title)
 
-        # Create milestone if needed
         if milestone_title and milestone_id is None:
             milestone_data = {"title": milestone_title}
             r_milestone = requests.post(
@@ -85,10 +100,10 @@ for repo in os.listdir(metadata_root):
             else:
                 print(f"Failed to create milestone '{milestone_title}': {r_milestone.status_code} {r_milestone.text}")
 
-        # Prepare issue data
+        description = issue.get("body", "") + f"\n\n_{github_issue_ref}_"
         data = {
             "title": issue["title"],
-            "description": issue.get("body", ""),
+            "description": description,
             "created_at": issue["created_at"],
             "labels": labels
         }
@@ -96,7 +111,6 @@ for repo in os.listdir(metadata_root):
         if milestone_id:
             data["milestone_id"] = milestone_id
 
-        # Map assignees
         assignees = []
         for assignee in issue.get("assignees", []):
             username = assignee["login"]
@@ -108,13 +122,11 @@ for repo in os.listdir(metadata_root):
         if assignees:
             data["assignee_ids"] = assignees
 
-        # Create issue
         r = requests.post(f"https://{host}/api/v4/projects/{project_id}/issues", headers=headers, json=data)
         if r.status_code == 201:
             issue_id = r.json()["iid"]
             print(f"Issue created: {data['title']}")
 
-            # Add comments
             for comment in issue.get("comments", []):
                 note_data = {
                     "body": comment.get("body", ""),
@@ -130,7 +142,6 @@ for repo in os.listdir(metadata_root):
                 else:
                     print(f"  Failed to import comment: {r_note.status_code} {r_note.text}")
 
-            # Close issue if originally closed
             if issue.get("state") == "closed":
                 close_url = f"https://{host}/api/v4/projects/{project_id}/issues/{issue_id}"
                 close_resp = requests.put(close_url, headers=headers, json={"state_event": "close"})
