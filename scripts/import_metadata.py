@@ -38,7 +38,7 @@ for repo in os.listdir(metadata_root):
     if not os.path.isdir(repo_path):
         continue
 
-    print(f"\n=== Importing metadata to {group_path}/{repo} ===")
+    print(f"Importing metadata to {group_path}/{repo}")
     encoded_path = quote(f"{group_path}/{repo}", safe="")
     project_url = f"https://{host}/api/v4/projects/{encoded_path}"
     resp = requests.get(project_url, headers=headers)
@@ -54,9 +54,12 @@ for repo in os.listdir(metadata_root):
         milestone_map = {m["title"]: m["id"] for m in r.json()}
 
     issues_file = os.path.join(repo_path, "issues.json")
-    if os.path.exists(issues_file):
-        with open(issues_file, "r") as f:
-            issues = json.load(f)
+    if not os.path.exists(issues_file):
+        print(f"No issues file for {repo}")
+        continue
+
+    with open(issues_file, "r") as f:
+        issues = json.load(f)
 
         for issue in issues:
             if "pull_request" in issue:
@@ -86,6 +89,8 @@ for repo in os.listdir(metadata_root):
                     milestone_id = r_milestone.json()["id"]
                     milestone_map[milestone_title] = milestone_id
                     print(f"Created milestone '{milestone_title}'")
+                else:
+                print(f"Failed to create milestone '{milestone_title}': {r_milestone.status_code} {r_milestone.text}")
 
             description = issue.get("body", "") + f"\n\n_{github_issue_ref}_"
             data = {
@@ -102,10 +107,9 @@ for repo in os.listdir(metadata_root):
                 username = assignee["login"]
                 user_search = requests.get(f"https://{host}/api/v4/users?username={username}", headers=headers)
                 if user_search.status_code == 200 and user_search.json():
-                    assignees.append(user_search.json()[0]["id"])
-                else:
-                    print(f" Assignee '{username}' not found in GitLab")
-
+                    user_id = user_search.json()[0]["id"]
+                    assignees.append(user_id)
+    
             if assignees:
                 data["assignee_ids"] = assignees
 
