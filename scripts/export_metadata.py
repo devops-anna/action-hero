@@ -20,7 +20,7 @@ headers = {"Authorization": f"Bearer {GH_TOKEN}"}
 backup_dir = f"metadata/{repo}"
 os.makedirs(backup_dir, exist_ok=True)
 
-print(f"\n🔄 Exporting metadata from GitHub repo: {org}/{repo}")
+print(f"\n Exporting metadata from GitHub repo: {org}/{repo}")
 print("\n Exporting issues...")
 issues_url = f"https://api.github.com/repos/{org}/{repo}/issues?state=all&per_page=100"
 issues = []
@@ -55,9 +55,6 @@ with open(f"{backup_dir}/issues.json", "w") as f:
     json.dump(issues, f, indent=2)
 print(f"Exported {len(issues)} issues with comments.")
 
-# -------------------------------
-# Export Pull Requests
-# -------------------------------
 print("\n Exporting pull requests...")
 pulls_url = f"https://api.github.com/repos/{org}/{repo}/pulls?state=all&per_page=100"
 pull_requests = []
@@ -73,7 +70,6 @@ while pulls_url:
     for pr in page_pulls:
         pr_number = pr["number"]
 
-        # Fetch regular PR comments (issue comments)
         issue_comments_url = f"https://api.github.com/repos/{org}/{repo}/issues/{pr_number}/comments"
         issue_comments = []
         ic_resp = requests.get(issue_comments_url, headers=headers)
@@ -81,7 +77,6 @@ while pulls_url:
             issue_comments = ic_resp.json()
         pr["comments"] = issue_comments
 
-        # Fetch review comments (inline code comments)
         review_comments_url = f"https://api.github.com/repos/{org}/{repo}/pulls/{pr_number}/comments"
         review_comments = []
         rc_resp = requests.get(review_comments_url, headers=headers)
@@ -96,4 +91,4 @@ while pulls_url:
 
 with open(f"{backup_dir}/pull_requests.json", "w") as f:
     json.dump(pull_requests, f, indent=2)
-print(f"✅ Exported {len(pull_requests)} pull requests with comments.")
+print(f" Exported {len(pull_requests)} pull requests with comments.")
