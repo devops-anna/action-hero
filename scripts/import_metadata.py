@@ -48,13 +48,11 @@ for repo in os.listdir(metadata_root):
 
     project_id = resp.json()["id"]
 
-    # --- Milestones map ---
     milestone_map = {}
     r = requests.get(f"https://{host}/api/v4/projects/{project_id}/milestones", headers=headers)
     if r.status_code == 200:
         milestone_map = {m["title"]: m["id"] for m in r.json()}
 
-    # === Import Issues ===
     issues_file = os.path.join(repo_path, "issues.json")
     if os.path.exists(issues_file):
         with open(issues_file, "r") as f:
@@ -62,7 +60,7 @@ for repo in os.listdir(metadata_root):
 
         for issue in issues:
             if "pull_request" in issue:
-                continue  # skip PRs here
+                continue  
 
             github_issue_ref = f"Imported from GitHub issue #{issue['number']}"
 
@@ -135,7 +133,6 @@ for repo in os.listdir(metadata_root):
             else:
                 print(f"Failed to create issue: {data['title']} — {r.status_code} {r.text}")
 
-    # === Import Pull Requests as Merge Requests ===
     pr_file = os.path.join(repo_path, "pull_requests.json")
     if os.path.exists(pr_file):
         with open(pr_file, "r") as f:
