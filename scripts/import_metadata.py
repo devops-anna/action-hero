@@ -109,6 +109,9 @@ for repo in os.listdir(metadata_root):
                 if user_search.status_code == 200 and user_search.json():
                     user_id = user_search.json()[0]["id"]
                     assignees.append(user_id)
+                else:
+                    print(f" Assignee '{username}' not found in GitLab")
+            print(f"Assigning issue to GitLab user IDs: {assignees}")
     
             if assignees:
                 data["assignee_ids"] = assignees
