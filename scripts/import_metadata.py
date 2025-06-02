@@ -195,4 +195,5 @@ for repo in os.listdir(metadata_root):
                         json={"state_event": "close"}
                     )
             else:
-                print(f"Failed to create MR: {pr['title']} — {r.status_code} {r.text}")
+                # print(f"Failed to create MR: {pr['title']} — {r.status_code} {r.text}")
+                print(f"Merge Request already exists for source branch '{source_branch}': {pr['title']}")
