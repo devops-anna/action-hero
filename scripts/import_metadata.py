@@ -103,6 +103,8 @@ for repo in os.listdir(metadata_root):
                 user_search = requests.get(f"https://{host}/api/v4/users?username={username}", headers=headers)
                 if user_search.status_code == 200 and user_search.json():
                     assignees.append(user_search.json()[0]["id"])
+                else:
+                    print(f" Assignee '{username}' not found in GitLab")
 
             if assignees:
                 data["assignee_ids"] = assignees
