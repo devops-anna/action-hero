@@ -90,7 +90,7 @@ for repo in os.listdir(metadata_root):
                     milestone_map[milestone_title] = milestone_id
                     print(f"Created milestone '{milestone_title}'")
                 else:
-                print(f"Failed to create milestone '{milestone_title}': {r_milestone.status_code} {r_milestone.text}")
+                    print(f"Failed to create milestone '{milestone_title}': {r_milestone.status_code} {r_milestone.text}")
 
             description = issue.get("body", "") + f"\n\n_{github_issue_ref}_"
             data = {
