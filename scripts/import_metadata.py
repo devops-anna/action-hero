@@ -175,9 +175,16 @@ for repo in os.listdir(metadata_root):
             assignee = pr.get("assignee")
             if assignee:
                 username = assignee["login"]
-                user_search = requests.get(f"https://{host}/api/v4/users?username={username}", headers=headers)
-                if user_search.status_code == 200 and user_search.json():
-                    data["assignee_id"] = user_search.json()[0]["id"]
+                user_search = requests.get(f"https://{host}/api/v4/users?search={username}", headers=headers)
+                if user_search.status_code == 200:
+                    matched_user = next((u for u in user_search.json() if u.get("username") == username), None)
+                    if matched_user:
+                        user_id = matched_user["id"]
+                        assignees.append(user_id)
+                    else:
+                        print(f" Assignee '{username}' not found by exact match in GitLab")
+                else:
+                    print(f" Error searching GitLab users for assignee '{username}'")
 
             r = requests.post(f"https://{host}/api/v4/projects/{project_id}/merge_requests", headers=headers, json=data)
             if r.status_code == 201:
