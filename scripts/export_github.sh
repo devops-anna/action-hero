@@ -7,7 +7,6 @@ REPOS_INPUT=$2
 
 echo "Exporting repos from GitHub org: $ORG"
 
-# Get GitHub token from env
 if [ -z "$GH_TOKEN" ]; then
   echo "Error: GH_TOKEN env variable not set"
   exit 1
@@ -16,11 +15,14 @@ fi
 mkdir -p backup
 cd backup
 
-# Function to clone a single repo
 clone_repo() {
   local repo_name="$1"
   echo "Cloning $repo_name ..."
   git clone --mirror "https://x-access-token:$GH_TOKEN@github.com/$ORG/$repo_name.git" "$repo_name.git"
+  # LFS fetch
+  cd "$repo_name.git"
+  git lfs fetch --all || echo "No LFS content found for $repo_name"
+  cd ..
 }
 
 if [ -z "$REPOS_INPUT" ]; then
@@ -51,9 +53,7 @@ if [ -z "$REPOS_INPUT" ]; then
   for repo in "${repos[@]}"; do
     clone_repo "$repo"
   done
-
 else
-  # Clone only listed repos
   IFS=',' read -ra repos <<< "$REPOS_INPUT"
   for repo in "${repos[@]}"; do
     clone_repo "$repo"
