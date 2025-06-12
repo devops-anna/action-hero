@@ -146,6 +146,12 @@ for repo in os.listdir(metadata_root):
     if os.path.exists(pr_file):
         with open(pr_file, "r") as f:
             pull_requests = json.load(f)
+            
+        local_repo_path = os.path.join("repos", repo)
+        if not os.path.exists(local_repo_path):
+            print(f"Missing local repo for {repo}, skipping MR import with commits.")
+            continue
+            
 
         for pr in pull_requests:
             github_pr_ref = f"Imported from GitHub PR #{pr['number']}"
@@ -159,7 +165,14 @@ for repo in os.listdir(metadata_root):
                     continue
 
             source_branch = pr.get("head", {}).get("ref", "main")
+            source_sha = pr.get("head", {}).get("sha")
             target_branch = pr.get("base", {}).get("ref", "main")
+            target_sha = pr.get("base", {}).get("sha")
+
+            os.system(f"git -C {local_repo_path} branch -f {source_branch} {source_sha}")
+            os.system(f"git -C {local_repo_path} branch -f {target_branch} {target_sha}")
+            os.system(f"git -C {local_repo_path} push origin {source_branch}:{source_branch}")
+            os.system(f"git -C {local_repo_path} push origin {target_branch}:{target_branch}")
 
             description = pr.get("body", "") + f"\n\n_{github_pr_ref}_"
             data = {
@@ -211,5 +224,4 @@ for repo in os.listdir(metadata_root):
                         json={"state_event": "close"}
                     )
             else:
-                # print(f"Failed to create MR: {pr['title']} — {r.status_code} {r.text}")
                 print(f"Merge Request already exists for source branch '{source_branch}': {pr['title']}")
