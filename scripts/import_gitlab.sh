@@ -55,6 +55,9 @@ process_repo() {
 
   remote_url="https://oauth2:$GL_TOKEN@$GL_HOST/$namespace_path/$repo_name.git"
   git --git-dir="$repo_dir" push --mirror "$remote_url" || { echo "Git push failed for $repo_name"; exit 1; }
+  cd "$repo_dir"
+  git lfs push --all "$remote_url" || echo "No LFS content to push for $repo_name"
+  cd ..
 }
 
 if [ -n "$PROJECT_NAME" ]; then
