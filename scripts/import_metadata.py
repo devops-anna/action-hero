@@ -67,12 +67,35 @@ for repo in os.listdir(metadata_root):
 
             github_issue_ref = f"Imported from GitHub issue #{issue['number']}"
 
+            assignees = []
+            for assignee in issue.get("assignees", []):
+                username = assignee["login"]
+                user_search = requests.get(f"https://{host}/api/v4/users?username={username}", headers=headers)
+                if user_search.status_code == 200 and user_search.json():
+                    user_id = user_search.json()[0]["id"]
+                    assignees.append(user_id)
+                else:
+                    print(f" Assignee '{username}' not found in GitLab")
+            print(f"Assigning issue to GitLab user IDs: {assignees}")
+
+            # 🔁 Check if issue exists and update if needed
             search_url = f"https://{host}/api/v4/projects/{project_id}/issues?search={quote(str(issue['number']))}"
             search_resp = requests.get(search_url, headers=headers)
 
             if search_resp.status_code == 200:
-                if any(github_issue_ref in i.get("description", "") for i in search_resp.json()):
+                existing_issue = next((i for i in search_resp.json() if github_issue_ref in i.get("description", "")), None)
+                if existing_issue:
                     print(f"Issue already exists: {issue['title']}")
+                    if assignees:
+                        update_resp = requests.put(
+                            f"https://{host}/api/v4/projects/{project_id}/issues/{existing_issue['iid']}",
+                            headers=headers,
+                            json={"assignee_ids": assignees}
+                        )
+                        if update_resp.status_code == 200:
+                            print(f"Updated assignees for issue: {issue['title']}")
+                        else:
+                            print(f"Failed to update assignees for issue: {issue['title']} - {update_resp.status_code} {update_resp.text}")
                     continue
 
             labels = [label["name"] for label in issue.get("labels", [])]
@@ -101,18 +124,6 @@ for repo in os.listdir(metadata_root):
             }
             if milestone_id:
                 data["milestone_id"] = milestone_id
-
-            assignees = []
-            for assignee in issue.get("assignees", []):
-                username = assignee["login"]
-                user_search = requests.get(f"https://{host}/api/v4/users?username={username}", headers=headers)
-                if user_search.status_code == 200 and user_search.json():
-                    user_id = user_search.json()[0]["id"]
-                    assignees.append(user_id)
-                else:
-                    print(f" Assignee '{username}' not found in GitLab")
-            print(f"Assigning issue to GitLab user IDs: {assignees}")
-    
             if assignees:
                 data["assignee_ids"] = assignees
 
