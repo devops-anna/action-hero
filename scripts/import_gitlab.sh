@@ -20,19 +20,9 @@ echo "Importing repos to GitLab group: $GL_GROUP at host: $GL_HOST"
 
 cd backup
 
-RESPONSE=$(curl -s --header "PRIVATE-TOKEN: $GL_TOKEN" "https://$GL_HOST/api/v4/groups?search=$GL_GROUP")
-echo "GitLab group search response: $RESPONSE"
-
-# Fail early if response is not a JSON array or empty
-if ! echo "$RESPONSE" | jq -e '.[0]' >/dev/null 2>&1; then
-  echo "Error: Unexpected or empty response when searching for GitLab group: $RESPONSE"
-  exit 1
-fi
-
-GL_GROUP_INFO=$(echo "$RESPONSE" | jq '.[0]')
+GL_GROUP_INFO=$(curl -s --header "PRIVATE-TOKEN: $GL_TOKEN" "https://$GL_HOST/api/v4/groups?search=$GL_GROUP" | jq '.[0]')
 namespace_id=$(echo "$GL_GROUP_INFO" | jq '.id')
 namespace_path=$(echo "$GL_GROUP_INFO" | jq -r '.full_path')
-
 
 if [ -z "$namespace_id" ] || [ "$namespace_id" = "null" ]; then
   echo "Error: GitLab group $GL_GROUP not found"
