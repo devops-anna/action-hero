@@ -10,8 +10,9 @@ if len(sys.argv) != 3:
     sys.exit(1)
 
 GL_TOKEN = os.getenv("GL_TOKEN")
-if not GL_TOKEN:
-    print("GL_TOKEN not set")
+GH_TOKEN = os.getenv("GH_TOKEN")
+if not GL_TOKEN or not GH_TOKEN:
+    print("Both GL_TOKEN and GH_TOKEN must be set")
     sys.exit(1)
 
 group = sys.argv[1]
@@ -38,12 +39,12 @@ for repo in os.listdir(metadata_root):
     if not os.path.isdir(repo_path):
         continue
 
-    print(f"Importing metadata to {group_path}/{repo}")
+    print(f"\n📦 Importing metadata to {group_path}/{repo}")
     encoded_path = quote(f"{group_path}/{repo}", safe="")
     project_url = f"https://{host}/api/v4/projects/{encoded_path}"
     resp = requests.get(project_url, headers=headers)
     if resp.status_code != 200:
-        print(f"Project {group_path}/{repo} not found.")
+        print(f"❌ Project {group_path}/{repo} not found.")
         continue
 
     project_id = resp.json()["id"]
@@ -53,20 +54,17 @@ for repo in os.listdir(metadata_root):
     if r.status_code == 200:
         milestone_map = {m["title"]: m["id"] for m in r.json()}
 
+    # ----- Import Issues -----
     issues_file = os.path.join(repo_path, "issues.json")
-    if not os.path.exists(issues_file):
-        print(f"No issues file for {repo}")
-        continue
-
-    with open(issues_file, "r") as f:
-        issues = json.load(f)
+    if os.path.exists(issues_file):
+        with open(issues_file, "r") as f:
+            issues = json.load(f)
 
         for issue in issues:
             if "pull_request" in issue:
-                continue  
+                continue
 
             github_issue_ref = f"Imported from GitHub issue #{issue['number']}"
-
             assignees = []
             for assignee in issue.get("assignees", []):
                 username = assignee["login"]
@@ -75,13 +73,11 @@ for repo in os.listdir(metadata_root):
                     user_id = user_search.json()[0]["id"]
                     assignees.append(user_id)
                 else:
-                    print(f" Assignee '{username}' not found in GitLab")
-            print(f"Assigning issue to GitLab user IDs: {assignees}")
+                    print(f"⚠️ Assignee '{username}' not found in GitLab")
+            print(f"🔗 Assigning issue to GitLab user IDs: {assignees}")
 
-            # 🔁 Check if issue exists and update if needed
             search_url = f"https://{host}/api/v4/projects/{project_id}/issues?search={quote(str(issue['number']))}"
             search_resp = requests.get(search_url, headers=headers)
-
             if search_resp.status_code == 200:
                 existing_issue = next((i for i in search_resp.json() if github_issue_ref in i.get("description", "")), None)
                 if existing_issue:
@@ -92,14 +88,10 @@ for repo in os.listdir(metadata_root):
                             headers=headers,
                             json={"assignee_ids": assignees}
                         )
-                        if update_resp.status_code == 200:
-                            print(f"Updated assignees for issue: {issue['title']}")
-                        else:
-                            print(f"Failed to update assignees for issue: {issue['title']} - {update_resp.status_code} {update_resp.text}")
                     continue
 
             labels = [label["name"] for label in issue.get("labels", [])]
-            milestone_title = issue.get("milestone")["title"] if issue.get("milestone") else None
+            milestone_title = issue.get("milestone", {}).get("title")
             milestone_id = milestone_map.get(milestone_title)
 
             if milestone_title and milestone_id is None:
@@ -111,9 +103,6 @@ for repo in os.listdir(metadata_root):
                 if r_milestone.status_code == 201:
                     milestone_id = r_milestone.json()["id"]
                     milestone_map[milestone_title] = milestone_id
-                    print(f"Created milestone '{milestone_title}'")
-                else:
-                    print(f"Failed to create milestone '{milestone_title}': {r_milestone.status_code} {r_milestone.text}")
 
             description = issue.get("body", "") + f"\n\n_{github_issue_ref}_"
             data = {
@@ -130,8 +119,7 @@ for repo in os.listdir(metadata_root):
             r = requests.post(f"https://{host}/api/v4/projects/{project_id}/issues", headers=headers, json=data)
             if r.status_code == 201:
                 issue_id = r.json()["iid"]
-                print(f"Issue created: {data['title']}")
-
+                print(f"✅ Issue created: {data['title']}")
                 for comment in issue.get("comments", []):
                     note_data = {
                         "body": comment.get("body", ""),
@@ -142,37 +130,42 @@ for repo in os.listdir(metadata_root):
                         headers=headers,
                         json=note_data
                     )
-                    if r_note.status_code == 201:
-                        print(f"  Comment imported")
                 if issue.get("state") == "closed":
                     requests.put(
                         f"https://{host}/api/v4/projects/{project_id}/issues/{issue_id}",
                         headers=headers,
                         json={"state_event": "close"}
                     )
-            else:
-                print(f"Failed to create issue: {data['title']} — {r.status_code} {r.text}")
 
+    # ----- Import Merge Requests -----
     pr_file = os.path.join(repo_path, "pull_requests.json")
     if os.path.exists(pr_file):
         with open(pr_file, "r") as f:
             pull_requests = json.load(f)
-            
+
+        # Clone GitHub repo if local repo is missing
         local_repo_path = os.path.join("repos", repo)
         if not os.path.exists(local_repo_path):
-            print(f"Missing local repo for {repo}, skipping MR import with commits.")
-            continue
-            
+            print(f"🔁 Cloning missing repo: {repo}")
+            os.makedirs("repos", exist_ok=True)
+            clone_url = f"https://github.com/{group}/{repo}.git"
+            result = os.system(f"git clone --mirror {clone_url} {local_repo_path}")
+            if result != 0:
+                print(f"❌ Failed to clone GitHub repo {repo}, skipping MRs.")
+                continue
+
+            os.system(f"git -C {local_repo_path} config --global --add safe.directory {os.path.abspath(local_repo_path)}")
+            gitlab_url = f"https://oauth2:{GL_TOKEN}@{host}/{group_path}/{repo}.git"
+            os.system(f"git -C {local_repo_path} remote add gitlab {gitlab_url}")
+            os.system(f"git -C {local_repo_path} push --mirror gitlab")
 
         for pr in pull_requests:
             github_pr_ref = f"Imported from GitHub PR #{pr['number']}"
-
             search_url = f"https://{host}/api/v4/projects/{project_id}/merge_requests?search={quote(str(pr['number']))}"
             search_resp = requests.get(search_url, headers=headers)
-
             if search_resp.status_code == 200:
                 if any(github_pr_ref in mr.get("description", "") for mr in search_resp.json()):
-                    print(f"Merge Request already exists: {pr['title']}")
+                    print(f"🔁 Merge Request already exists: {pr['title']}")
                     continue
 
             source_branch = pr.get("head", {}).get("ref", "main")
@@ -182,8 +175,8 @@ for repo in os.listdir(metadata_root):
 
             os.system(f"git -C {local_repo_path} branch -f {source_branch} {source_sha}")
             os.system(f"git -C {local_repo_path} branch -f {target_branch} {target_sha}")
-            os.system(f"git -C {local_repo_path} push origin {source_branch}:{source_branch}")
-            os.system(f"git -C {local_repo_path} push origin {target_branch}:{target_branch}")
+            os.system(f"git -C {local_repo_path} push gitlab {source_branch}:{source_branch}")
+            os.system(f"git -C {local_repo_path} push gitlab {target_branch}:{target_branch}")
 
             description = pr.get("body", "") + f"\n\n_{github_pr_ref}_"
             data = {
@@ -196,6 +189,7 @@ for repo in os.listdir(metadata_root):
                 "allow_collaboration": True
             }
 
+            assignees = []
             assignee = pr.get("assignee")
             if assignee:
                 username = assignee["login"]
@@ -205,16 +199,13 @@ for repo in os.listdir(metadata_root):
                     if matched_user:
                         user_id = matched_user["id"]
                         assignees.append(user_id)
-                    else:
-                        print(f" Assignee '{username}' not found by exact match in GitLab")
-                else:
-                    print(f" Error searching GitLab users for assignee '{username}'")
+                if assignees:
+                    data["assignee_ids"] = assignees
 
             r = requests.post(f"https://{host}/api/v4/projects/{project_id}/merge_requests", headers=headers, json=data)
             if r.status_code == 201:
                 mr_iid = r.json()["iid"]
-                print(f"Merge Request created: {pr['title']}")
-
+                print(f"✅ Merge Request created: {pr['title']}")
                 for comment in pr.get("comments", []):
                     note_data = {
                         "body": comment.get("body", ""),
@@ -225,9 +216,6 @@ for repo in os.listdir(metadata_root):
                         headers=headers,
                         json=note_data
                     )
-                    if r_note.status_code == 201:
-                        print(f"  PR Comment imported")
-
                 if pr.get("state") == "closed":
                     requests.put(
                         f"https://{host}/api/v4/projects/{project_id}/merge_requests/{mr_iid}",
@@ -235,4 +223,4 @@ for repo in os.listdir(metadata_root):
                         json={"state_event": "close"}
                     )
             else:
-                print(f"Merge Request already exists for source branch '{source_branch}': {pr['title']}")
+                print(f"❌ Failed to create MR for: {pr['title']} — {r.status_code}: {r.text}")
