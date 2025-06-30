@@ -5,8 +5,8 @@ import json
 import requests
 from urllib.parse import quote
 
-if len(sys.argv) != 3:
-    print("Usage: import_metadata.py <gitlab_group> <gitlab_host>")
+if len(sys.argv) != 4:
+    print("Usage: import_metadata.py <gitlab_group> <gitlab_host> <github_org>")
     sys.exit(1)
 
 GL_TOKEN = os.getenv("GL_TOKEN")
@@ -15,8 +15,10 @@ if not GL_TOKEN or not GH_TOKEN:
     print("Both GL_TOKEN and GH_TOKEN must be set")
     sys.exit(1)
 
-group = sys.argv[1]
-host = sys.argv[2]
+gitlab_group = sys.argv[1]
+gitlab_host = sys.argv[2]
+github_org = sys.argv[3]
+
 headers = {"PRIVATE-TOKEN": GL_TOKEN}
 
 def get_group_path(group):
