@@ -6,7 +6,7 @@ import requests
 from urllib.parse import quote
 
 if len(sys.argv) != 4:
-    print("Usage: import_metadata.py <gitlab_group> <gitlab_host> <github_org>")
+    print("Usage: import_metadata.py <gitlab_group> <gitlab_gitlab_host> <github_org>")
     sys.exit(1)
 
 GL_TOKEN = os.getenv("GL_TOKEN")
@@ -16,20 +16,20 @@ if not GL_TOKEN or not GH_TOKEN:
     sys.exit(1)
 
 gitlab_group = sys.argv[1]
-gitlab_host = sys.argv[2]
+gitlab_gitlab_host = sys.argv[2]
 github_org = sys.argv[3]
 
 headers = {"PRIVATE-TOKEN": GL_TOKEN}
 
 def get_group_path(group):
-    url = f"https://{host}/api/v4/groups?search={group}"
+    url = f"https://{gitlab_host}/api/v4/groups?search={group}"
     r = requests.get(url, headers=headers)
     if r.status_code != 200 or not r.json():
         print("Group not found.")
         sys.exit(1)
     return r.json()[0]["full_path"]
 
-group_path = get_group_path(group)
+group_path = get_group_path(gitlab_group)
 
 metadata_root = "metadata"
 if not os.path.exists(metadata_root):
@@ -43,7 +43,7 @@ for repo in os.listdir(metadata_root):
 
     print(f"\n📦 Importing metadata to {group_path}/{repo}")
     encoded_path = quote(f"{group_path}/{repo}", safe="")
-    project_url = f"https://{host}/api/v4/projects/{encoded_path}"
+    project_url = f"https://{gitlab_host}/api/v4/projects/{encoded_path}"
     resp = requests.get(project_url, headers=headers)
     if resp.status_code != 200:
         print(f"❌ Project {group_path}/{repo} not found.")
@@ -52,7 +52,7 @@ for repo in os.listdir(metadata_root):
     project_id = resp.json()["id"]
 
     milestone_map = {}
-    r = requests.get(f"https://{host}/api/v4/projects/{project_id}/milestones", headers=headers)
+    r = requests.get(f"https://{gitlab_host}/api/v4/projects/{project_id}/milestones", headers=headers)
     if r.status_code == 200:
         milestone_map = {m["title"]: m["id"] for m in r.json()}
 
@@ -70,7 +70,7 @@ for repo in os.listdir(metadata_root):
             assignees = []
             for assignee in issue.get("assignees", []):
                 username = assignee["login"]
-                user_search = requests.get(f"https://{host}/api/v4/users?username={username}", headers=headers)
+                user_search = requests.get(f"https://{gitlab_host}/api/v4/users?username={username}", headers=headers)
                 if user_search.status_code == 200 and user_search.json():
                     user_id = user_search.json()[0]["id"]
                     assignees.append(user_id)
@@ -78,7 +78,7 @@ for repo in os.listdir(metadata_root):
                     print(f"⚠️ Assignee '{username}' not found in GitLab")
             print(f"🔗 Assigning issue to GitLab user IDs: {assignees}")
 
-            search_url = f"https://{host}/api/v4/projects/{project_id}/issues?search={quote(str(issue['number']))}"
+            search_url = f"https://{gitlab_host}/api/v4/projects/{project_id}/issues?search={quote(str(issue['number']))}"
             search_resp = requests.get(search_url, headers=headers)
             if search_resp.status_code == 200:
                 existing_issue = next((i for i in search_resp.json() if github_issue_ref in i.get("description", "")), None)
@@ -86,7 +86,7 @@ for repo in os.listdir(metadata_root):
                     print(f"Issue already exists: {issue['title']}")
                     if assignees:
                         update_resp = requests.put(
-                            f"https://{host}/api/v4/projects/{project_id}/issues/{existing_issue['iid']}",
+                            f"https://{gitlab_host}/api/v4/projects/{project_id}/issues/{existing_issue['iid']}",
                             headers=headers,
                             json={"assignee_ids": assignees}
                         )
@@ -98,7 +98,7 @@ for repo in os.listdir(metadata_root):
 
             if milestone_title and milestone_id is None:
                 r_milestone = requests.post(
-                    f"https://{host}/api/v4/projects/{project_id}/milestones",
+                    f"https://{gitlab_host}/api/v4/projects/{project_id}/milestones",
                     headers=headers,
                     json={"title": milestone_title}
                 )
@@ -118,7 +118,7 @@ for repo in os.listdir(metadata_root):
             if assignees:
                 data["assignee_ids"] = assignees
 
-            r = requests.post(f"https://{host}/api/v4/projects/{project_id}/issues", headers=headers, json=data)
+            r = requests.post(f"https://{gitlab_host}/api/v4/projects/{project_id}/issues", headers=headers, json=data)
             if r.status_code == 201:
                 issue_id = r.json()["iid"]
                 print(f"✅ Issue created: {data['title']}")
@@ -128,13 +128,13 @@ for repo in os.listdir(metadata_root):
                         "created_at": comment.get("created_at"),
                     }
                     r_note = requests.post(
-                        f"https://{host}/api/v4/projects/{project_id}/issues/{issue_id}/notes",
+                        f"https://{gitlab_host}/api/v4/projects/{project_id}/issues/{issue_id}/notes",
                         headers=headers,
                         json=note_data
                     )
                 if issue.get("state") == "closed":
                     requests.put(
-                        f"https://{host}/api/v4/projects/{project_id}/issues/{issue_id}",
+                        f"https://{gitlab_host}/api/v4/projects/{project_id}/issues/{issue_id}",
                         headers=headers,
                         json={"state_event": "close"}
                     )
@@ -157,13 +157,13 @@ for repo in os.listdir(metadata_root):
                 continue
 
             os.system(f"git -C {local_repo_path} config --global --add safe.directory {os.path.abspath(local_repo_path)}")
-            gitlab_url = f"https://oauth2:{GL_TOKEN}@{host}/{group_path}/{repo}.git"
+            gitlab_url = f"https://oauth2:{GL_TOKEN}@{gitlab_host}/{group_path}/{repo}.git"
             os.system(f"git -C {local_repo_path} remote add gitlab {gitlab_url}")
             os.system(f"git -C {local_repo_path} push --mirror gitlab")
 
         for pr in pull_requests:
             github_pr_ref = f"Imported from GitHub PR #{pr['number']}"
-            search_url = f"https://{host}/api/v4/projects/{project_id}/merge_requests?search={quote(str(pr['number']))}"
+            search_url = f"https://{gitlab_host}/api/v4/projects/{project_id}/merge_requests?search={quote(str(pr['number']))}"
             search_resp = requests.get(search_url, headers=headers)
             if search_resp.status_code == 200:
                 if any(github_pr_ref in mr.get("description", "") for mr in search_resp.json()):
@@ -195,7 +195,7 @@ for repo in os.listdir(metadata_root):
             assignee = pr.get("assignee")
             if assignee:
                 username = assignee["login"]
-                user_search = requests.get(f"https://{host}/api/v4/users?search={username}", headers=headers)
+                user_search = requests.get(f"https://{gitlab_host}/api/v4/users?search={username}", headers=headers)
                 if user_search.status_code == 200:
                     matched_user = next((u for u in user_search.json() if u.get("username") == username), None)
                     if matched_user:
@@ -204,7 +204,7 @@ for repo in os.listdir(metadata_root):
                 if assignees:
                     data["assignee_ids"] = assignees
 
-            r = requests.post(f"https://{host}/api/v4/projects/{project_id}/merge_requests", headers=headers, json=data)
+            r = requests.post(f"https://{gitlab_host}/api/v4/projects/{project_id}/merge_requests", headers=headers, json=data)
             if r.status_code == 201:
                 mr_iid = r.json()["iid"]
                 print(f"✅ Merge Request created: {pr['title']}")
@@ -214,13 +214,13 @@ for repo in os.listdir(metadata_root):
                         "created_at": comment.get("created_at"),
                     }
                     r_note = requests.post(
-                        f"https://{host}/api/v4/projects/{project_id}/merge_requests/{mr_iid}/notes",
+                        f"https://{gitlab_host}/api/v4/projects/{project_id}/merge_requests/{mr_iid}/notes",
                         headers=headers,
                         json=note_data
                     )
                 if pr.get("state") == "closed":
                     requests.put(
-                        f"https://{host}/api/v4/projects/{project_id}/merge_requests/{mr_iid}",
+                        f"https://{gitlab_host}/api/v4/projects/{project_id}/merge_requests/{mr_iid}",
                         headers=headers,
                         json={"state_event": "close"}
                     )
