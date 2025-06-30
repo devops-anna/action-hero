@@ -57,4 +57,5 @@ jobs:
 
       - name: Import metadata to GitLab
         run: |
-          python3 scripts/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}"
+          python3 scripts/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}"
+
