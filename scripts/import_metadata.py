@@ -41,12 +41,12 @@ for repo in os.listdir(metadata_root):
     if not os.path.isdir(repo_path):
         continue
 
-    print(f"\n📦 Importing metadata to {group_path}/{repo}")
+    print(f"\n Importing metadata to {group_path}/{repo}")
     encoded_path = quote(f"{group_path}/{repo}", safe="")
     project_url = f"https://{gitlab_host}/api/v4/projects/{encoded_path}"
     resp = requests.get(project_url, headers=headers)
     if resp.status_code != 200:
-        print(f"❌ Project {group_path}/{repo} not found.")
+        print(f" Project {group_path}/{repo} not found.")
         continue
 
     project_id = resp.json()["id"]
@@ -75,8 +75,8 @@ for repo in os.listdir(metadata_root):
                     user_id = user_search.json()[0]["id"]
                     assignees.append(user_id)
                 else:
-                    print(f"⚠️ Assignee '{username}' not found in GitLab")
-            print(f"🔗 Assigning issue to GitLab user IDs: {assignees}")
+                    print(f" Assignee '{username}' not found in GitLab")
+            print(f" Assigning issue to GitLab user IDs: {assignees}")
 
             search_url = f"https://{gitlab_host}/api/v4/projects/{project_id}/issues?search={quote(str(issue['number']))}"
             search_resp = requests.get(search_url, headers=headers)
@@ -121,7 +121,7 @@ for repo in os.listdir(metadata_root):
             r = requests.post(f"https://{gitlab_host}/api/v4/projects/{project_id}/issues", headers=headers, json=data)
             if r.status_code == 201:
                 issue_id = r.json()["iid"]
-                print(f"✅ Issue created: {data['title']}")
+                print(f" Issue created: {data['title']}")
                 for comment in issue.get("comments", []):
                     note_data = {
                         "body": comment.get("body", ""),
@@ -139,7 +139,7 @@ for repo in os.listdir(metadata_root):
                         json={"state_event": "close"}
                     )
 
-    # ----- Import Merge Requests -----
+ 
     pr_file = os.path.join(repo_path, "pull_requests.json")
     if os.path.exists(pr_file):
         with open(pr_file, "r") as f:
@@ -147,12 +147,12 @@ for repo in os.listdir(metadata_root):
 
         local_repo_path = os.path.join("repos", repo)
         if not os.path.exists(local_repo_path):
-            print(f"🔁 Cloning missing repo: {repo}")
+            print(f" Cloning missing repo: {repo}")
             os.makedirs("repos", exist_ok=True)
             clone_url = f"https://github.com/{github_org}/{repo}.git"
             result = os.system(f"git clone --mirror {clone_url} {local_repo_path}")
             if result != 0:
-                print(f"❌ Failed to clone GitHub repo {repo}, skipping MRs.")
+                print(f" Failed to clone GitHub repo {repo}, skipping MRs.")
                 continue
 
             os.system(f"git -C {local_repo_path} config --global --add safe.directory {os.path.abspath(local_repo_path)}")
@@ -166,7 +166,7 @@ for repo in os.listdir(metadata_root):
             search_resp = requests.get(search_url, headers=headers)
             if search_resp.status_code == 200:
                 if any(github_pr_ref in mr.get("description", "") for mr in search_resp.json()):
-                    print(f"🔁 Merge Request already exists: {pr['title']}")
+                    print(f" Merge Request already exists: {pr['title']}")
                     continue
 
             source_branch = pr.get("head", {}).get("ref", "main")
@@ -206,7 +206,7 @@ for repo in os.listdir(metadata_root):
             r = requests.post(f"https://{gitlab_host}/api/v4/projects/{project_id}/merge_requests", headers=headers, json=data)
             if r.status_code == 201:
                 mr_iid = r.json()["iid"]
-                print(f"✅ Merge Request created: {pr['title']}")
+                print(f" Merge Request created: {pr['title']}")
                 for comment in pr.get("comments", []):
                     note_data = {
                         "body": comment.get("body", ""),
@@ -224,4 +224,4 @@ for repo in os.listdir(metadata_root):
                         json={"state_event": "close"}
                     )
             else:
-                print(f"❌ Failed to create MR for: {pr['title']} — {r.status_code}: {r.text}")
+                print(f" Failed to create MR for: {pr['title']} — {r.status_code}: {r.text}")
