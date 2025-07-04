@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
-set -x  # Enable debug
+set -x  
 
 GL_GROUP=$1
 GL_HOST=$2
-PROJECT_NAME=$3  # Optional
+PROJECT_NAME=$3 
 
 if [ -z "$GL_TOKEN" ]; then
   echo "Error: GL_TOKEN env variable not set"
