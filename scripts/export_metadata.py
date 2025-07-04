@@ -40,7 +40,7 @@ while issues_url:
         while comments_url:
             c_resp = requests.get(comments_url, headers=headers)
             if c_resp.status_code != 200:
-                print(f"⚠ Failed to fetch comments for issue #{issue['number']}: {c_resp.text}")
+                print(f" Failed to fetch comments for issue #{issue['number']}: {c_resp.text}")
                 break
             comments.extend(c_resp.json())
             comments_url = c_resp.links.get('next', {}).get('url')
