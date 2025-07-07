@@ -28,9 +28,19 @@ for repo_path in "$BACKUP_DIR/repos"/*.git; do
 
   # Create project on GitLab (ignore if it already exists)
   echo "Creating project $GL_GROUP/$repo_name on $GL_HOST (if not exists)..."
-  create_response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://$GL_HOST/api/v4/projects" \
-    --header "PRIVATE-TOKEN: $GL_TOKEN" \
-    --data "name=$repo_name&namespace_id=$(curl -s --header "PRIVATE-TOKEN: $GL_TOKEN" "https://$GL_HOST/api/v4/groups/$GL_GROUP" | jq '.id')")
+  GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: $GL_TOKEN" \
+  "https://$GL_HOST/api/v4/groups?search=$(basename "$GL_GROUP")" \
+  | jq "map(select(.full_path==\"$GL_GROUP\"))[0].id")
+
+  if [ -z "$GROUP_ID" ] || [ "$GROUP_ID" = "null" ]; then
+    echo "❌ Could not find GitLab group ID for '$GL_GROUP'"
+    exit 1
+  fi
+
+create_response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://$GL_HOST/api/v4/projects" \
+  --header "PRIVATE-TOKEN: $GL_TOKEN" \
+  --data "name=$repo_name&namespace_id=$GROUP_ID")
+
 
   if [ "$create_response" = "201" ]; then
     echo "✔️ Created project $repo_name"
