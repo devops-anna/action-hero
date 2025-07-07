@@ -1,70 +1,49 @@
 #!/bin/bash
 set -e
-set -x
 
-GL_GROUP=$1
-GL_HOST=$2
-PROJECT_NAME=$3
+GL_GROUP="$1"
+GL_HOST="$2"
+BACKUP_DIR="$3"
 
-# Check GitLab token
-if [ -z "$GL_TOKEN" ]; then
-  echo "Error: GL_TOKEN env variable not set"
+if [ -z "$GL_GROUP" ] || [ -z "$GL_HOST" ] || [ -z "$BACKUP_DIR" ]; then
+  echo "Usage: import_gitlab.sh <gitlab_group> <gitlab_host> <backup_dir>"
   exit 1
 fi
 
-# Validate inputs
-if [ -z "$GL_GROUP" ] || [ -z "$GL_HOST" ]; then
-  echo "Usage: import_gitlab.sh <gitlab_group> <gitlab_host> [project_name]"
+if [ ! -d "$BACKUP_DIR" ]; then
+  echo "Error: Backup directory '$BACKUP_DIR' not found. Ensure export step completed successfully."
   exit 1
 fi
 
-# Validate backup directory
-if [ ! -d "backup" ]; then
-  echo "Error: 'backup' directory not found. Ensure export step completed successfully."
+if [ ! -d "$BACKUP_DIR/repos" ]; then
+  echo "Error: '$BACKUP_DIR/repos' directory not found. No repos to import."
   exit 1
 fi
 
-cd backup
+echo "Importing repositories from: $BACKUP_DIR/repos"
 
-# Fetch GitLab group info
-GL_GROUP_INFO=$(curl -s --header "PRIVATE-TOKEN: $GL_TOKEN" "https://$GL_HOST/api/v4/groups?search=$GL_GROUP" | jq '.[0]')
-namespace_id=$(echo "$GL_GROUP_INFO" | jq '.id')
-namespace_path=$(echo "$GL_GROUP_INFO" | jq -r '.full_path')
+for repo_path in "$BACKUP_DIR/repos"/*.git; do
+  repo_name=$(basename "$repo_path" .git)
+  echo "Processing repository: $repo_name"
 
-if [ -z "$namespace_id" ] || [ "$namespace_id" = "null" ]; then
-  echo "Error: GitLab group $GL_GROUP not found"
-  exit 1
-fi
+  # Create project on GitLab (ignore if it already exists)
+  echo "Creating project $GL_GROUP/$repo_name on $GL_HOST (if not exists)..."
+  create_response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://$GL_HOST/api/v4/projects" \
+    --header "PRIVATE-TOKEN: $GL_TOKEN" \
+    --data "name=$repo_name&namespace_id=$(curl -s --header "PRIVATE-TOKEN: $GL_TOKEN" "https://$GL_HOST/api/v4/groups/$GL_GROUP" | jq '.id')")
 
-process_repo() {
-  local repo_name=$1
-  local repo_dir="$repo_name.git"
-
-  if [ ! -d "$repo_dir" ]; then
-    echo "⚠️ Repo directory $repo_dir not found — skipping"
-    return
+  if [ "$create_response" = "201" ]; then
+    echo "✔️ Created project $repo_name"
+  else
+    echo "ℹ️ Project $repo_name may already exist or failed to create (HTTP $create_response)"
   fi
 
-  echo "🔄 Processing repo: $repo_name"
-  project_path_urlencoded=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${namespace_path}/${repo_name}', safe=''))")
+  # Push repo to GitLab
+  gitlab_url="https://oauth2:$GL_TOKEN@$GL_HOST/$GL_GROUP/$repo_name.git"
 
-  # Check if project exists
-  status_code=$(curl -s -o /dev/null -w "%{http_code}" --header "PRIVATE-TOKEN: $GL_TOKEN" \
-    "https://$GL_HOST/api/v4/projects/$project_path_urlencoded")
+  echo "Pushing $repo_name to GitLab..."
+  git -C "$repo_path" remote set-url origin "$gitlab_url" || git -C "$repo_path" remote add origin "$gitlab_url"
+  git -C "$repo_path" push --mirror origin
 
-  # Create project if not exists
-  if [ "$status_code" == "404" ]; then
-    echo "📦 Creating project $repo_name under $GL_GROUP"
-    create_response=$(curl -s -w "%{http_code}" --output /tmp/create_response.json --request POST \
-      --header "PRIVATE-TOKEN: $GL_TOKEN" \
-      --data "name=$repo_name&namespace_id=$namespace_id" \
-      "https://$GL_HOST/api/v4/projects")
-
-    create_code="${create_response: -3}"
-    if [ "$create_code" != "200" ] && [ "$create_code" != "201" ]; then
-      echo "❌ Failed to create project $repo_name. API response:"
-      cat /tmp/create_response.json
-      exit 1
-    fi
-  else
-    echo "✅ Project $repo_name alread_
+  echo "✅ Finished importing $repo_name"
+done
