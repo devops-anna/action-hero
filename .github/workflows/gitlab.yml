@@ -47,7 +47,7 @@ jobs:
 
       - name: Set script permissions
         run: |
-          chmod +x scripts/export_github.sh script/import_gitlab.sh
+          chmod +x script/export_github.sh script/import_gitlab.sh
 
       - name: Export GitHub repos (code)
         run: |
