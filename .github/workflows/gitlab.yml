@@ -41,9 +41,7 @@ jobs:
 
       - name: Create timestamped backup folder
         run: |
-          export BACKUP_DIR="backup_$(date +%Y%m%d_%H%M%S)"
-          mkdir -p "$BACKUP_DIR"
-          echo "BACKUP_DIR=$BACKUP_DIR" >> $GITHUB_ENV
+          echo "BACKUP_DIR=backup_$(date +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
 
       - name: Set script permissions
         run: |
@@ -51,20 +49,19 @@ jobs:
 
       - name: Export GitHub repos (code)
         run: |
-          ./script/export_github.sh "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "$BACKUP_DIR"
+          ./script/export_github.sh "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "${{ env.BACKUP_DIR }}"
 
       - name: Import repos to GitLab (code)
         run: |
-          ./script/import_gitlab.sh "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "$BACKUP_DIR"
+          ./script/import_gitlab.sh "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ env.BACKUP_DIR }}"
 
       - name: Export GitHub metadata (issues, PRs, etc.)
         run: |
-          python3 script/export_metadata.py "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "$BACKUP_DIR"
+          python3 script/export_metadata.py "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "${{ env.BACKUP_DIR }}"
 
       - name: Import metadata to GitLab
         run: |
-           python3 script/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}" "$BACKUP_DIR"
-
+          python3 script/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}" "${{ env.BACKUP_DIR }}"
 
       - name: Upload backup folder as artifact
         uses: actions/upload-artifact@v4
