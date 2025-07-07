@@ -16,8 +16,9 @@ if [ -z "$BACKUP_DIR" ]; then
   BACKUP_DIR="backup"
 fi
 
-mkdir -p "$BACKUP_DIR"
-cd "$BACKUP_DIR"
+# ✅ Create target directories
+mkdir -p "$BACKUP_DIR/repos"
+cd "$BACKUP_DIR/repos"
 
 clone_repo() {
   local repo_name="$1"
@@ -65,5 +66,4 @@ else
   done
 fi
 
-echo "All repos cloned successfully!"
-
+echo "✅ All repos cloned successfully into $BACKUP_DIR/repos/"
