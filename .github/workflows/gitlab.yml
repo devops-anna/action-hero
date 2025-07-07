@@ -63,7 +63,8 @@ jobs:
 
       - name: Import metadata to GitLab
         run: |
-          python3 script/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}" "$BACKUP_DIR"
+           python3 scripts/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}" "$BACKUP_DIR"
+
 
       - name: Upload backup folder as artifact
         uses: actions/upload-artifact@v4
