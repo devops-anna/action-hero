@@ -47,23 +47,23 @@ jobs:
 
       - name: Set script permissions
         run: |
-          chmod +x scripts/export_github.sh scripts/import_gitlab.sh
+          chmod +x scripts/export_github.sh script/import_gitlab.sh
 
       - name: Export GitHub repos (code)
         run: |
-          ./scripts/export_github.sh "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "$BACKUP_DIR"
+          ./script/export_github.sh "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "$BACKUP_DIR"
 
       - name: Import repos to GitLab (code)
         run: |
-          ./scripts/import_gitlab.sh "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "$BACKUP_DIR"
+          ./script/import_gitlab.sh "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "$BACKUP_DIR"
 
       - name: Export GitHub metadata (issues, PRs, etc.)
         run: |
-          python3 scripts/export_metadata.py "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "$BACKUP_DIR"
+          python3 script/export_metadata.py "${{ github.event.inputs.github_org }}" "${{ github.event.inputs.repos }}" "$BACKUP_DIR"
 
       - name: Import metadata to GitLab
         run: |
-          python3 scripts/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}" "$BACKUP_DIR"
+          python3 script/import_metadata.py "${{ github.event.inputs.gitlab_group }}" "${{ github.event.inputs.gitlab_host }}" "${{ github.event.inputs.github_org }}" "$BACKUP_DIR"
 
       - name: Upload backup folder as artifact
         uses: actions/upload-artifact@v4
