@@ -179,7 +179,8 @@ for repo in os.listdir(metadata_root):
             os.system(f"git -C {local_repo_path} push gitlab {source_branch}:{source_branch}")
             os.system(f"git -C {local_repo_path} push gitlab {target_branch}:{target_branch}")
 
-            description = pr.get("body", "") + f"\n\n_{github_pr_ref}_"
+            description = (pr.get("body") or "") + f"\n\n_{github_pr_ref}_"
+
             data = {
                 "title": pr["title"],
                 "description": description,
