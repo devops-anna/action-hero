@@ -93,9 +93,9 @@ for repo in os.listdir(metadata_root):
                     continue
 
             labels = [label["name"] for label in issue.get("labels", [])]
-            milestone_title = issue.get("milestone", {}).get("title")
+            milestone = issue.get("milestone")
+            milestone_title = milestone.get("title") if milestone else None
             milestone_id = milestone_map.get(milestone_title)
-
             if milestone_title and milestone_id is None:
                 r_milestone = requests.post(
                     f"https://{gitlab_host}/api/v4/projects/{project_id}/milestones",
