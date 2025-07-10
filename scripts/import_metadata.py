@@ -106,7 +106,7 @@ for repo in os.listdir(metadata_root):
                     milestone_id = r_milestone.json()["id"]
                     milestone_map[milestone_title] = milestone_id
 
-            description = issue.get("body", "") + f"\n\n_{github_issue_ref}_"
+            description = (issue.get("body") or "") + f"\n\n_{github_issue_ref}_"
             data = {
                 "title": issue["title"],
                 "description": description,
